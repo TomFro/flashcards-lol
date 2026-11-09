@@ -326,6 +326,8 @@ function show() {
   $("fr-img").classList.toggle("hidden", isVideo);
   $("fr-video").classList.toggle("hidden", !isVideo);
   $("bk-portrait").classList.toggle("hidden", !isVideo);
+  $("bk-key").classList.toggle("hidden", !isVideo);
+  if (isVideo) $("bk-key").querySelector("b").textContent = c.key;
   if (isVideo) playVideo(c); else { $("fr-video").pause(); $("fr-img").src = c.img; }
 
   const isChamp = c.type === "champ" || c.type === "video";
