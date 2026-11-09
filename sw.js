@@ -12,7 +12,7 @@ self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 function networkFirst(req, cacheName) {
   return fetch(req)
     .then((res) => {
-      if (res.ok) { const copy = res.clone(); caches.open(cacheName).then((c) => c.put(req, copy)); }
+      if (res.ok || res.type === "opaque") { const copy = res.clone(); caches.open(cacheName).then((c) => c.put(req, copy)); }
       return res;
     })
     .catch(() => caches.match(req, { ignoreSearch: true, ignoreVary: true }).then((hit) => hit || Response.error()));

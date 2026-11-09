@@ -23,12 +23,15 @@ const store = {
 const progress = store.get("flc_progress", {});   // id de carte -> boîte 0..5
 const custom = store.get("flc_custom", {});       // id de carte -> description modifiée
 const isGuest = () => window.Account && Account.mode === "guest";
+const isOnlineUser = () => window.Account && (Account.mode === "user" || Account.mode === "offline");
 function replaceObj(o, n) { for (const k of Object.keys(o)) delete o[k]; Object.assign(o, n || {}); }
 // Enregistre la progression : navigateur (+ compte si connecté). Rien pour un invité.
+// Hors ligne, le navigateur garde tout et le compte est mis à jour au retour d'internet.
 function persist() {
   if (isGuest()) return;
   store.set("flc_progress", progress);
   store.set("flc_custom", custom);
+  if (isOnlineUser()) store.set("flc_unsynced", true);
   if (Account.mode === "user") Account.save({ progress, custom });
 }
 const prefs = Object.assign(
@@ -655,13 +658,9 @@ function sectionUrls(section) {
   return [...urls];
 }
 
-const isAdmin = () => Account.mode === "user" && (window.ADMIN_UIDS || []).includes(Account.user.uid);
-
 function updateDlButton() {
   const section = prefs.mode;
   const btn = $("dl-btn");
-  // bouton réservé aux comptes administrateurs (sauf en local sur le PC)
-  $("dl").classList.toggle("hidden", Account.mode !== "local" && !isAdmin());
   if (downloading) return;
   $("dl-bar").parentElement.classList.add("hidden");
   if (!canCache()) {
@@ -744,39 +743,64 @@ function renderAccount() {
     return;
   }
   const u = Account.user;
-  box.innerHTML = `<div class="acc-user">${u.photoURL ? `<img src="${u.photoURL}" alt="">` : ""}<span></span>
-    <button id="acc-id" class="link" title="Copier mon identifiant de compte">ID</button>
-    <button id="acc-logout" class="link">Déconnexion</button></div>`;
-  $("acc-id").onclick = () => {
-    navigator.clipboard.writeText(u.uid).then(() => { $("acc-id").textContent = "ID copié ✓"; }, () => prompt("Ton identifiant :", u.uid));
-  };
+  const offline = mode === "offline";
+  box.innerHTML = `<div class="acc-user">${u.photoURL ? `<img src="${u.photoURL}" alt="" onerror="this.remove()">` : ""}<span></span>
+    ${offline ? `<em class="acc-off" title="Ta progression est gardée sur cet appareil et sera envoyée sur ton compte au retour d'internet">hors ligne</em>`
+              : `<button id="acc-logout" class="link">Déconnexion</button>`}</div>`;
   box.querySelector("span").textContent = u.displayName || u.email || "Connecté";
-  $("acc-logout").onclick = () => Account.signOut();
+  if (!offline) $("acc-logout").onclick = () => Account.signOut();
 }
 
+// flc_owner : compte à qui appartient la progression gardée dans ce navigateur
+// flc_unsynced : des réponses données hors ligne n'ont pas encore été envoyées au compte
 async function onAccountChange(mode) {
+  const local = () => ({ progress: store.get("flc_progress", {}), custom: store.get("flc_custom", {}) });
   if (mode === "guest") {
-    if (lastMode === "user") { store.set("flc_progress", {}); store.set("flc_custom", {}); } // déconnexion : on ne laisse rien
+    if (lastMode === "user") { // déconnexion : on ne laisse rien
+      ["flc_progress", "flc_custom", "flc_owner", "flc_unsynced"].forEach((k) => localStorage.removeItem(k));
+    }
     replaceObj(progress, {});
     replaceObj(custom, {});
+  } else if (mode === "offline") {
+    // pas d'internet : on continue avec la copie du navigateur, tout est gardé
+    const l = local();
+    replaceObj(progress, l.progress);
+    replaceObj(custom, l.custom);
   } else if (mode === "user") {
-    const localCopy = { progress: store.get("flc_progress", {}), custom: store.get("flc_custom", {}) };
-    const cloud = await Account.load().catch(() => null);
-    if (cloud && (cloud.progress || cloud.custom)) {
+    const uid = Account.user.uid;
+    const owner = store.get("flc_owner", null);
+    const l = owner === uid || owner === null ? local() : { progress: {}, custom: {} };
+    // on affiche tout de suite la copie du navigateur, le compte arrive juste après
+    replaceObj(progress, l.progress);
+    replaceObj(custom, l.custom);
+    store.set("flc_owner", uid);
+    lastMode = mode;
+    renderAccount();
+    if (cards.champ.length) rebuild();
+    let cloud = null, failed = false;
+    try { cloud = await Account.load(); } catch { failed = true; }
+    if (Account.mode !== "user" || Account.user.uid !== uid) return; // changé entre-temps
+    const unsynced = store.get("flc_unsynced", false) && owner === uid;
+    const hasCloud = cloud && (cloud.progress || cloud.custom);
+    if (failed) {
+      // compte injoignable : on garde la copie locale, elle partira au prochain enregistrement
+    } else if (hasCloud && unsynced) {
+      // réponses données hors ligne : on les ajoute par-dessus le compte
+      replaceObj(progress, { ...cloud.progress, ...l.progress });
+      replaceObj(custom, { ...cloud.custom, ...l.custom });
+      persist();
+    } else if (hasCloud) {
       replaceObj(progress, cloud.progress);
       replaceObj(custom, cloud.custom);
       store.set("flc_progress", progress);
       store.set("flc_custom", custom);
     } else {
       // première connexion : on reprend la progression déjà faite sur cet appareil
-      replaceObj(progress, localCopy.progress);
-      replaceObj(custom, localCopy.custom);
       persist();
     }
   }
   lastMode = mode;
   renderAccount();
-  updateDlButton();
   if (cards.champ.length) rebuild();
 }
 document.addEventListener("click", () => { const m = document.getElementById("acc-menu"); if (m) m.classList.add("hidden"); });

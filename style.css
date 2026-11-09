@@ -400,6 +400,7 @@ body.all-mode .key-group { display: none !important; }
 .acc-user { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--gold1); }
 .acc-user img { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--gold2); }
 .acc-user .link { margin: 0; font-size: 11px; }
+.acc-off { font-style: normal; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--gold3); border: 1px solid #c89b3c66; border-radius: 10px; padding: 2px 8px; cursor: help; }
 /* invité : pas de suivi de progression */
 #b-next { display: none; }
 body.guest #b-next { display: inline-block; }

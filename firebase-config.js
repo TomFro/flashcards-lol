@@ -11,6 +11,3 @@ window.FIREBASE_CONFIG = {
   appId: "1:510976996536:web:c6b23aca12ae0267eaf04d",
 };
 
-// Comptes administrateurs (identifiants Firebase, pas d'e-mail pour ne rien exposer) :
-// eux seuls voient le bouton de téléchargement des données.
-window.ADMIN_UIDS = [];
