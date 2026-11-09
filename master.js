@@ -1058,6 +1058,22 @@ const Master = (() => {
     if (rb) rb.onclick = (e) => { e.stopPropagation(); recycle(id); view(id); renderGrid(); };
   }
 
+  // image de skin introuvable chez Data Dragon (souvent les skins récents) : on prend le splash de CommunityDragon,
+  // et si lui non plus ne charge pas, l'image de base du champion
+  document.addEventListener("error", (e) => {
+    const img = e.target;
+    if (!img || img.tagName !== "IMG") return;
+    const m = img.src.match(/\/champion\/loading\/(\w+)_(\d+)\.jpg$/);
+    if (m && m[2] !== "0") {
+      const raw = champRaw[m[1]];
+      img.src = raw ? `https://cdn.communitydragon.org/latest/champion/${raw.key}/splash-art/centered/skin/${m[2]}` : `${DD}/cdn/img/champion/loading/${m[1]}_0.jpg`;
+      img.dataset.champ = m[1];
+    } else if (img.dataset.champ && img.src.includes("communitydragon")) {
+      img.src = `${DD}/cdn/img/champion/loading/${img.dataset.champ}_0.jpg`;
+      delete img.dataset.champ;
+    }
+  }, true);
+
   function wireUi() {
     $("m-open").onclick = openPack;
     $("m-skin").onclick = buySkin;
