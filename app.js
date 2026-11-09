@@ -364,6 +364,21 @@ function fmtDelay(ms) {
 
 // Choisit la prochaine carte : d'abord celles à revoir (les plus en retard), puis des nouvelles,
 // puis celles prévues dans les 20 min. Sinon : « tout est révisé ».
+// Dernières cartes montrées : on évite de les revoir tout de suite, et de rester sur le même champion
+const recent = [];
+const rand = (list) => list[Math.floor(Math.random() * list.length)];
+function varied(list) {
+  const ids = new Set(recent.map((c) => c.id));
+  const champs = new Set(recent.slice(-3).map((c) => c.champId).filter(Boolean));
+  let l = list.filter((c) => !ids.has(c.id));
+  if (!l.length) l = list.filter((c) => c.id !== lastId);
+  if (!l.length) l = list;
+  const other = l.filter((c) => !c.champId || !champs.has(c.champId));
+  return other.length ? other : l;
+}
+
+// Choisit la prochaine carte, au hasard parmi : celles à revoir (mélangées avec quelques nouvelles),
+// sinon des nouvelles, sinon celles prévues dans les 20 min. Sinon : « tout est révisé ».
 function pickCard() {
   const now = Date.now();
   const due = [], soon = [], fresh = [], later = [];
@@ -374,13 +389,16 @@ function pickCard() {
     else if (p.d <= now + LEARN_AHEAD) soon.push(c);
     else later.push(c);
   }
-  const byDate = (a, b) => srs(a.id).d - srs(b.id).d;
-  const notLast = (list) => (list.length > 1 ? list.filter((c) => c.id !== lastId) : list);
-  if (due.length && !(due.length === 1 && due[0].id === lastId && fresh.length)) return notLast(due.sort(byDate))[0];
-  if (fresh.length) { const f = notLast(fresh); return f[Math.floor(Math.random() * f.length)]; }
-  if (due.length) return due[0];
-  if (soon.length) return notLast(soon.sort(byDate))[0];
-  if (ahead && later.length) return notLast(later.sort(byDate))[0];
+  if (due.length && fresh.length) {
+    const ids = new Set(recent.map((c) => c.id));
+    const dueOk = due.filter((c) => !ids.has(c.id));
+    // environ 1 carte sur 4 est une nouvelle, comme le mélange d'Anki
+    return !dueOk.length || Math.random() < 0.25 ? rand(varied(fresh)) : rand(varied(dueOk));
+  }
+  if (due.length) return rand(varied(due));
+  if (fresh.length) return rand(varied(fresh));
+  if (soon.length) return rand(varied(soon));
+  if (ahead && later.length) return rand(varied(later.sort((a, b) => srs(a.id).d - srs(b.id).d).slice(0, 20)));
   return null;
 }
 
@@ -480,11 +498,12 @@ function next(step = 1) {
     return;
   }
   const pick = studyMode() ? deck[(studyIdx = (studyIdx + step + deck.length) % deck.length)]
-    : isGuest() ? deck[Math.floor(Math.random() * deck.length)] : pickCard();
+    : isGuest() ? rand(varied(deck)) : pickCard();
   if (!pick) return showDone();
   $("empty").classList.add("hidden");
   current = pick;
   lastId = current.id;
+  if (!studyMode()) { recent.push(current); if (recent.length > Math.min(12, Math.floor(deck.length / 2))) recent.shift(); }
   setTimeout(show, 150); // laisse la carte se retourner avant de changer le contenu
 }
 
