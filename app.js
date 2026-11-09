@@ -23,11 +23,11 @@ const store = {
 const progress = store.get("flc_progress", {});   // id de carte -> boîte 0..5
 const custom = store.get("flc_custom", {});       // id de carte -> description modifiée
 const prefs = Object.assign(
-  { mode: "champ", lane: [], cls: [], key: [], tree: [], slot: [], itype: ["legendary", "boots"], irole: [], icon: false, name: false, review: false },
+  { mode: "champ", all: false, lane: [], cls: [], key: [], tree: [], slot: [], itype: ["legendary", "boots"], irole: [], icon: false, name: false, review: false },
   store.get("flc_prefs", {}));
 
 let version = "", local = false;
-let cards = { champ: [], video: [], rune: [], item: [] };
+let cards = { champ: [], champAll: [], video: [], rune: [], item: [] };
 let deck = [], current = null, lastId = null;
 const champRaw = {}; // données officielles complètes de chaque champion, pour la fiche détaillée
 const brokenVideos = new Set(); // vidéos introuvables, on ne les propose plus pendant la session
@@ -110,6 +110,11 @@ async function load() {
       { key: "P", name: c.passive.name, desc: c.passive.description, icon: url.passive(c.passive.image.full), cd: [] },
       ...c.spells.map((s, i) => ({ key: "QWER"[i], name: s.name, desc: s.description, icon: url.spell(s.image.full), cd: cooldowns(s) })),
     ];
+    cards.champAll.push({
+      id: `${c.id}_ALL`, type: "champ", all: true, champ: c.name, champId: c.id, lanes, tags: c.tags, key: "ALL",
+      img: url.loading(c.id), official: "", short: "", name: c.name, icon: url.loading(c.id),
+      spells: spells.map((s) => ({ key: s.key, name: s.name, icon: s.icon, cd: s.cd, short: d[s.key] || shorten(clean(s.desc)) })),
+    });
     for (const s of spells) {
       const official = clean(s.desc);
       const base = {
@@ -224,6 +229,8 @@ function buildFilters() {
   $("o-icon").checked = prefs.icon;
   $("o-review").checked = prefs.review;
   $("o-name").checked = prefs.name;
+  $("o-all").checked = prefs.all;
+  $("o-all").onchange = (e) => { prefs.all = e.target.checked; saveAndRebuild(); };
   $("o-name").onchange = (e) => { prefs.name = e.target.checked; store.set("flc_prefs", prefs); show(); };
   $("o-icon").onchange = (e) => { prefs.icon = e.target.checked; store.set("flc_prefs", prefs); show(); };
   $("o-review").onchange = (e) => { prefs.review = e.target.checked; saveAndRebuild(); };
@@ -241,7 +248,8 @@ function buildFilters() {
 function saveAndRebuild() { store.set("flc_prefs", prefs); rebuild(); }
 
 function rebuild() {
-  document.body.className = `mode-${prefs.mode}`;
+  const allMode = prefs.mode === "champ" && prefs.all;
+  document.body.className = `mode-${prefs.mode}${allMode ? " all-mode" : ""}`;
   const q = $("f-search").value.trim().toLowerCase();
   const any = (sel, vals) => sel.length === 0 || vals.some((v) => sel.includes(v));
   if (prefs.mode === "rune") {
@@ -249,20 +257,21 @@ function rebuild() {
   } else if (prefs.mode === "item") {
     deck = cards.item.filter((c) => any(prefs.itype, [c.itype]) && any(prefs.irole, c.roles));
   } else {
-    deck = cards[prefs.mode].filter((c) =>
-      any(prefs.lane, c.lanes) && any(prefs.cls, c.tags) && any(prefs.key, [c.key]) &&
+    deck = (allMode ? cards.champAll : cards[prefs.mode]).filter((c) =>
+      any(prefs.lane, c.lanes) && any(prefs.cls, c.tags) && (allMode || any(prefs.key, [c.key])) &&
       (!q || c.champ.toLowerCase().includes(q)) && !brokenVideos.has(c.id));
   }
   if (prefs.review) deck = deck.filter((c) => (progress[c.id] ?? 0) < 3);
   const champs = new Set(deck.map((c) => c.champId)).size;
   $("count").textContent = prefs.mode === "rune" ? `${deck.length} runes`
-    : prefs.mode === "item" ? `${deck.length} objets` : `${deck.length} cartes (${champs} champions)`;
+    : prefs.mode === "item" ? `${deck.length} objets`
+    : allMode ? `${deck.length} champions` : `${deck.length} cartes (${champs} champions)`;
   updateStats();
   next();
 }
 
 function updateStats() {
-  const all = cards[prefs.mode];
+  const all = prefs.mode === "champ" && prefs.all ? cards.champAll : cards[prefs.mode];
   const known = all.filter((c) => (progress[c.id] ?? 0) >= 3).length;
   $("stats").innerHTML = `<b>${known}</b> / ${all.length} cartes maîtrisées`;
   $("stats-bar").style.width = all.length ? `${(100 * known) / all.length}%` : "0";
@@ -321,7 +330,14 @@ function show() {
   const isChamp = c.type === "champ" || c.type === "video";
   $("backdrop").style.backgroundImage = isChamp ? `url("${c.img}")` : "none";
   const keyBox = $("fr-key");
-  if (c.type === "champ") {
+  $("card").classList.toggle("all", !!c.all);
+  if (c.all) {
+    $("fr-name").textContent = prefs.name ? c.champ : "Qui est-ce ?";
+    $("fr-q").textContent = "Et ses 5 sorts ?";
+    keyBox.classList.add("hidden");
+    $("fr-spell").classList.add("hidden");
+    fillAll(c);
+  } else if (c.type === "champ") {
     $("fr-name").textContent = prefs.name ? c.champ : "Qui est-ce ?";
     $("fr-q").textContent = c.key === "P" ? "Quel est son passif" : "Quel est son sort";
     keyBox.querySelector("b").textContent = c.key;
@@ -359,6 +375,23 @@ function show() {
     : "";
   $("bk-official").textContent = c.official;
   $("bk-details").open = false;
+}
+
+// Verso du mode "tous les sorts" : une ligne par sort, cliquable pour les détails
+function fillAll(c) {
+  $("bk-all-name").textContent = c.champ;
+  $("bk-all-list").innerHTML = "";
+  for (const s of c.spells) {
+    const row = document.createElement("button");
+    row.className = "all-row";
+    row.dataset.k = s.key;
+    row.innerHTML = `<img src="${s.icon}" alt=""><span class="all-key">${s.key}</span>
+      <span class="all-text"><b></b><span></span>${s.cd.length ? `<em>CD ${s.cd.join(" / ")} s</em>` : ""}</span>`;
+    row.querySelector("b").textContent = s.name;
+    row.querySelector(".all-text > span").textContent = custom[`${c.champId}_${s.key}`] || s.short;
+    row.onclick = (e) => { e.stopPropagation(); openDetail(s.key); };
+    $("bk-all-list").appendChild(row);
+  }
 }
 
 function flip() {
@@ -489,8 +522,11 @@ function merakiHtml(data, key) {
   return `<div class="values"><div class="v-title">Valeurs par rang${patch}</div>${rows.join("")}</div>`;
 }
 
+const isDetail = () => $("card").classList.contains("detailed");
+
 function openDetail(key) {
   if (!current || !["champ", "video"].includes(current.type)) return;
+  if (!$("card").classList.contains("flipped")) return; // seulement une fois la carte révélée
   const c = champRaw[current.champId];
   if (!c) return;
   $("detail-tabs").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.k === key));
@@ -516,24 +552,28 @@ function openDetail(key) {
   $("detail-stats").innerHTML = stats.map(([l, v]) => `<div><span>${l}</span><b>${v}</b></div>`).join("");
   $("detail-body").innerHTML = body;
   $("detail-values").innerHTML = "";
-  $("detail").classList.remove("hidden");
-  $("detail").dataset.k = key;
+  // petite animation quand on passe d'un sort à l'autre
+  const box = $("detail");
+  box.classList.remove("swap"); void box.offsetWidth; box.classList.add("swap");
+  $("card").classList.add("detailed");
+  box.scrollTop = 0;
+  box.dataset.k = key;
   const champId = c.id;
   loadMeraki(champId).then((data) => {
     if ($("detail").dataset.k === key && current && current.champId === champId) $("detail-values").innerHTML = merakiHtml(data, key);
   });
 }
-function closeDetail() { $("detail").classList.add("hidden"); }
+function closeDetail() { $("card").classList.remove("detailed"); $("detail").dataset.k = ""; }
 // touche du clavier français -> sort
 const AZERTY = { Q: "A", W: "Z", E: "E", R: "R" };
 const KEY_FROM_PRESS = { p: "P", a: "Q", q: "Q", z: "W", w: "W", e: "E", r: "R" };
 
 function wire() {
-  $("detail").onclick = (e) => { if (e.target.id === "detail" || e.target.closest("#detail-close")) closeDetail(); };
-  $("detail-tabs").querySelectorAll("button").forEach((b) => (b.onclick = () => openDetail(b.dataset.k)));
+  $("detail-close").onclick = (e) => { e.stopPropagation(); closeDetail(); };
+  $("detail-tabs").querySelectorAll("button").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); openDetail(b.dataset.k); }));
   $("spellbar").querySelectorAll("button").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); openDetail(b.dataset.k); }));
   $("card").onclick = (e) => {
-    if (e.target.closest("details, #edit")) return;
+    if (e.target.closest("details, #edit, #detail, .all-row")) return;
     flip();
   };
   $("b-again").onclick = () => answer(false);
@@ -554,14 +594,14 @@ function wire() {
   };
   document.addEventListener("keydown", (e) => {
     if (e.target.tagName === "INPUT") return;
-    if (!$("detail").classList.contains("hidden") && ["Space", "Enter"].includes(e.code)) { e.preventDefault(); closeDetail(); return; }
+    if (isDetail() && ["Space", "Enter"].includes(e.code)) { e.preventDefault(); closeDetail(); return; }
     if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); flip(); }
     else if (e.key === "1" || e.key === "ArrowLeft") answer(false);
     else if (e.key === "2" || e.key === "ArrowRight") answer(true);
     else if (e.key === "Escape") closeDetail();
     else if (KEY_FROM_PRESS[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const k = KEY_FROM_PRESS[e.key.toLowerCase()];
-      if (!$("detail").classList.contains("hidden") && $("detail").dataset.k === k) closeDetail(); else openDetail(k);
+      if (isDetail() && $("detail").dataset.k === k) closeDetail(); else openDetail(k);
     }
   });
 }

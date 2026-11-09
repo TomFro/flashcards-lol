@@ -60,6 +60,28 @@
           <div id="bk-official"></div>
         </details>
         <button id="edit" class="link">✎ Modifier la description</button>
+        <div id="bk-all">
+          <div id="bk-all-name"></div>
+          <div class="ornament"><span></span></div>
+          <div id="bk-all-list"></div>
+          <div class="all-hint">Clique sur un sort ou appuie sur P A Z E R pour les détails</div>
+        </div>
+        <div id="detail">
+          <div class="detail-box">
+            <button id="detail-close" title="Fermer (Échap)">✕</button>
+            <div class="detail-head">
+              <img id="detail-icon" class="spell-icon big" alt="">
+              <div><div id="detail-sub"></div><div id="detail-name"></div></div>
+            </div>
+            <div id="detail-tabs">
+              <button data-k="P">P</button><button data-k="Q">A</button><button data-k="W">Z</button><button data-k="E">E</button><button data-k="R">R</button>
+            </div>
+            <div id="detail-stats"></div>
+            <div id="detail-values"></div>
+            <div id="detail-body"></div>
+            <div class="detail-note">Texte officiel de Riot. Un « ? » marque une valeur que Riot ne fournit plus dans ses données publiques.</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -78,23 +100,6 @@
   <div id="empty" class="hidden">Aucune carte avec ces filtres.</div>
 </main>
 
-<div id="detail" class="hidden">
-  <div class="detail-box">
-    <button id="detail-close" title="Fermer (Échap)">✕</button>
-    <div class="detail-head">
-      <img id="detail-icon" class="spell-icon big" alt="">
-      <div><div id="detail-sub"></div><div id="detail-name"></div></div>
-    </div>
-    <div id="detail-tabs">
-      <button data-k="P">P</button><button data-k="Q">A</button><button data-k="W">Z</button><button data-k="E">E</button><button data-k="R">R</button>
-    </div>
-    <div id="detail-stats"></div>
-    <div id="detail-values"></div>
-    <div id="detail-body"></div>
-    <div class="detail-note">Texte officiel de Riot. Un « ? » marque une valeur que Riot ne fournit plus dans ses données publiques.</div>
-  </div>
-</div>
-
 <section id="filters">
   <div class="filters-title"><span>Filtres</span><em id="count"></em></div>
   <div class="filters-grid">
@@ -106,7 +111,7 @@
       <h3>Classe</h3>
       <div class="chips" id="f-class"></div>
     </div>
-    <div class="group champ-only">
+    <div class="group champ-only key-group">
       <h3>Sort</h3>
       <div class="chips keys" id="f-key"></div>
     </div>
@@ -131,6 +136,7 @@
       <input id="f-search" class="champ-only" type="search" placeholder="Chercher un champion…">
       <label class="switch not-video"><input type="checkbox" id="o-icon"><i></i>
         <span class="champ-only">Icône du sort au recto</span><span class="rune-only">Nom de la rune au recto</span><span class="item-only">Nom de l'objet au recto</span></label>
+      <label class="switch champ-only not-video"><input type="checkbox" id="o-all"><i></i> Deviner tous les sorts d'un coup</label>
       <label class="switch champ-only not-video"><input type="checkbox" id="o-name"><i></i> Nom du champion au recto</label>
       <label class="switch"><input type="checkbox" id="o-review"><i></i> Seulement les cartes à revoir</label>
     </div>
