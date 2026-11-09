@@ -1,5 +1,12 @@
 // Configuration Firebase (comptes Google / GitHub).
-// Colle ici le bloc firebaseConfig de la console Firebase. Ces clés sont publiques par nature :
-// la sécurité vient des règles Firestore (chacun ne lit que sa propre progression).
-// Laisse null pour désactiver les comptes : la progression reste alors dans le navigateur.
-window.FIREBASE_CONFIG = null;
+// Ces clés sont publiques par nature : la sécurité vient des règles Firestore
+// (chacun ne lit que sa propre progression, voir firestore.rules).
+// Mets null pour désactiver les comptes : la progression reste alors dans le navigateur.
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAoQq-x_RJ72bxQ2gZZlMfWohLmHaLldvs",
+  authDomain: "flashcards-lol.firebaseapp.com",
+  projectId: "flashcards-lol",
+  storageBucket: "flashcards-lol.firebasestorage.app",
+  messagingSenderId: "510976996536",
+  appId: "1:510976996536:web:c6b23aca12ae0267eaf04d",
+};
