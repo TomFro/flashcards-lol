@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flashcards LoL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="backdrop"></div>
+
+<header class="topbar">
+  <div class="logo">Flashcards<span>League of Legends</span></div>
+  <nav id="modes">
+    <button data-mode="champ" class="on">Sorts</button>
+    <button data-mode="video">Vidéos</button>
+    <button data-mode="rune">Runes</button>
+    <button data-mode="item">Objets</button>
+  </nav>
+  <div class="mastery">
+    <div class="mastery-text" id="stats"></div>
+    <div class="bar"><div id="stats-bar"></div></div>
+  </div>
+</header>
+
+<div id="banner" class="hidden"></div>
+
+<main class="stage">
+  <div id="loading"><div class="spinner"></div>Chargement des données…</div>
+
+  <div id="card" class="card hidden" tabindex="0">
+    <div class="inner">
+      <div class="face front">
+        <img id="fr-img" alt="">
+        <video id="fr-video" muted loop playsinline class="hidden"></video>
+        <div class="plate">
+          <div id="fr-name"></div>
+          <div class="ornament"><span></span></div>
+          <div class="question">
+            <span id="fr-q"></span>
+            <div id="fr-key" class="key"><b></b></div>
+            <img id="fr-spell" class="spell-icon" alt="">
+          </div>
+        </div>
+      </div>
+      <div class="face back">
+        <div class="icons">
+          <img id="bk-portrait" class="hidden" alt="">
+          <img id="bk-icon" class="spell-icon big" alt="">
+        </div>
+        <div id="bk-title"></div>
+        <div class="ornament"><span></span></div>
+        <div id="bk-desc"></div>
+        <div id="bk-who"></div>
+        <div id="bk-cd"></div>
+        <details id="bk-details">
+          <summary>Description officielle</summary>
+          <div id="bk-official"></div>
+        </details>
+        <button id="edit" class="link">✎ Modifier la description</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="spellbar" class="hidden">
+    <span>Détails</span>
+    <button data-k="P">P</button><button data-k="Q">A</button><button data-k="W">Z</button><button data-k="E">E</button><button data-k="R">R</button>
+  </div>
+  <div class="actions">
+    <div id="hint">Clique sur la carte ou appuie sur <kbd>Espace</kbd> pour la retourner</div>
+    <div id="answer" class="hidden">
+      <button id="b-again" class="btn again">À revoir <kbd>1</kbd></button>
+      <button id="b-good" class="btn good">Je savais <kbd>2</kbd></button>
+    </div>
+  </div>
+  <div id="empty" class="hidden">Aucune carte avec ces filtres.</div>
+</main>
+
+<div id="detail" class="hidden">
+  <div class="detail-box">
+    <button id="detail-close" title="Fermer (Échap)">✕</button>
+    <div class="detail-head">
+      <img id="detail-icon" class="spell-icon big" alt="">
+      <div><div id="detail-sub"></div><div id="detail-name"></div></div>
+    </div>
+    <div id="detail-tabs">
+      <button data-k="P">P</button><button data-k="Q">A</button><button data-k="W">Z</button><button data-k="E">E</button><button data-k="R">R</button>
+    </div>
+    <div id="detail-stats"></div>
+    <div id="detail-values"></div>
+    <div id="detail-body"></div>
+    <div class="detail-note">Texte officiel de Riot. Un « ? » marque une valeur que Riot ne fournit plus dans ses données publiques.</div>
+  </div>
+</div>
+
+<section id="filters">
+  <div class="filters-title"><span>Filtres</span><em id="count"></em></div>
+  <div class="filters-grid">
+    <div class="group champ-only">
+      <h3>Lane</h3>
+      <div class="chips lanes" id="f-lane"></div>
+    </div>
+    <div class="group champ-only">
+      <h3>Classe</h3>
+      <div class="chips" id="f-class"></div>
+    </div>
+    <div class="group champ-only">
+      <h3>Sort</h3>
+      <div class="chips keys" id="f-key"></div>
+    </div>
+    <div class="group rune-only">
+      <h3>Arbre</h3>
+      <div class="chips" id="f-tree"></div>
+    </div>
+    <div class="group rune-only">
+      <h3>Type</h3>
+      <div class="chips" id="f-slot"></div>
+    </div>
+    <div class="group item-only">
+      <h3>Type d'objet</h3>
+      <div class="chips" id="f-itype"></div>
+    </div>
+    <div class="group item-only">
+      <h3>Pour quels champions</h3>
+      <div class="chips" id="f-irole"></div>
+    </div>
+    <div class="group options">
+      <h3>Options</h3>
+      <input id="f-search" class="champ-only" type="search" placeholder="Chercher un champion…">
+      <label class="switch not-video"><input type="checkbox" id="o-icon"><i></i>
+        <span class="champ-only">Icône du sort au recto</span><span class="rune-only">Nom de la rune au recto</span><span class="item-only">Nom de l'objet au recto</span></label>
+      <label class="switch champ-only not-video"><input type="checkbox" id="o-name"><i></i> Nom du champion au recto</label>
+      <label class="switch"><input type="checkbox" id="o-review"><i></i> Seulement les cartes à revoir</label>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span id="version"></span>
+  <button id="reset" class="link">Remettre la progression à zéro</button>
+</footer>
+
+<script src="data/data.js"></script>
+<script src="descriptions.js"></script>
+<script src="runes-desc.js"></script>
+<script src="items-desc.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
