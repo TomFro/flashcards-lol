@@ -104,12 +104,14 @@
   <div class="actions">
     <div id="hint">Clique sur la carte ou appuie sur <kbd>Espace</kbd> pour la retourner</div>
     <div id="answer" class="hidden">
-      <button id="b-again" class="btn again">À revoir <kbd>1</kbd></button>
-      <button id="b-good" class="btn good">Je savais <kbd>2</kbd></button>
+      <button id="b-again" class="btn grade again" data-g="0"><span>À revoir<kbd>1</kbd></span><small></small></button>
+      <button id="b-hard" class="btn grade hard" data-g="1"><span>Difficile<kbd>2</kbd></span><small></small></button>
+      <button id="b-good" class="btn grade good" data-g="2"><span>Bien<kbd>3</kbd></span><small></small></button>
+      <button id="b-easy" class="btn grade easy" data-g="3"><span>Facile<kbd>4</kbd></span><small></small></button>
       <button id="b-next" class="btn good">Suivante <kbd>→</kbd></button>
     </div>
   </div>
-  <div id="empty" class="hidden">Aucune carte avec ces filtres.</div>
+  <div id="empty" class="hidden"><span id="empty-text">Aucune carte avec ces filtres.</span><button id="b-ahead" class="btn good hidden">Continuer quand même</button></div>
 </main>
 
 <section id="filters">
@@ -151,7 +153,7 @@
         <span class="champ-only">Icône du sort au recto</span><span class="rune-only">Nom de la rune au recto</span><span class="item-only">Nom de l'objet au recto</span></label>
       <label class="switch champ-only not-video"><input type="checkbox" id="o-all"><i></i> Deviner tous les sorts d'un coup</label>
       <label class="switch champ-only not-video"><input type="checkbox" id="o-name"><i></i> Nom du champion au recto</label>
-      <label class="switch"><input type="checkbox" id="o-review"><i></i> Seulement les cartes à revoir</label>
+      <label class="switch"><input type="checkbox" id="o-review"><i></i> Seulement les cartes à revoir maintenant</label>
     </div>
   </div>
 </section>

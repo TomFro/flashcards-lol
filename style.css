@@ -78,7 +78,7 @@ body::before {
 
 /* ---------- Zone de la carte ---------- */
 .stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px 16px 20px; gap: 18px; }
-#loading, #empty { color: var(--grey1); font-size: 15px; letter-spacing: 1px; display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 120px 0; }
+#loading, #empty { text-align: center; line-height: 1.6; color: var(--grey1); font-size: 15px; letter-spacing: 1px; display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 120px 0; }
 .spinner { width: 40px; height: 40px; border: 2px solid var(--gold5); border-top-color: var(--gold2); border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -157,6 +157,15 @@ button.link:hover { color: var(--gold2); }
 .btn.again:hover { border-color: #e04a5c; box-shadow: 0 0 18px #be1e3766; }
 .btn.good { border-color: var(--blue3); background: linear-gradient(180deg, #0a323c, #041a20); color: var(--blue1); }
 .btn.good:hover { border-color: var(--blue2); box-shadow: 0 0 18px #0ac8b966; }
+/* 4 boutons de réponse façon Anki, avec le prochain délai en dessous */
+.btn.grade { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 22px; min-width: 120px; }
+.btn.grade small { font-family: var(--text); font-size: 11px; font-weight: 500; letter-spacing: .5px; text-transform: none; opacity: .8; }
+.btn.hard { border-color: #8a5a1e; background: linear-gradient(180deg, #2e2010, #160f06); color: #f0c47a; }
+.btn.hard:hover { border-color: #e0a04a; box-shadow: 0 0 18px #c8821e66; }
+.btn.easy { border-color: #2e7d4a; background: linear-gradient(180deg, #0e2e1a, #06160c); color: #8ff0b0; }
+.btn.easy:hover { border-color: #4fe08a; box-shadow: 0 0 18px #1ec85a66; }
+#answer { gap: 12px; }
+#empty .btn { font-size: 13px; padding: 10px 24px; }
 kbd { font-family: var(--text); font-size: 10px; padding: 1px 6px; margin: 0 4px 0 8px; border: 1px solid currentColor; opacity: .6; letter-spacing: 0; }
 
 /* ---------- Filtres en bas ---------- */
@@ -279,6 +288,10 @@ footer button.link { margin: 0; font-size: 11px; }
   .detail-box { padding: 20px 18px 16px; }
   #hint { font-size: 12px; text-align: center; }
   #hint kbd, .btn kbd { display: none; }
+  #answer { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; }
+  #answer.hidden { display: none; }
+  body.guest #answer { grid-template-columns: 1fr; }
+  .btn.grade { min-width: 0; padding: 9px 4px; font-size: 11px; letter-spacing: 1px; }
 }
 
 /* Valeurs chiffrées des sorts */
@@ -411,7 +424,7 @@ body.all-mode .key-group { display: none !important; }
 /* invité : pas de suivi de progression */
 #b-next { display: none; }
 body.guest #b-next { display: inline-block; }
-body.guest #b-again, body.guest #b-good, body.guest #edit, body.guest #reset, body.guest .switch:has(#o-review) { display: none !important; }
+body.guest #b-again, body.guest #b-good, body.guest #b-hard, body.guest #b-easy, body.guest #edit, body.guest #reset, body.guest .switch:has(#o-review) { display: none !important; }
 body.guest .topbar-right .bar { display: none; }
 
 /* ---------- Matchups sous la carte ---------- */

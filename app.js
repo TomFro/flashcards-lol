@@ -263,6 +263,7 @@ function buildFilters() {
 function saveAndRebuild() { store.set("flc_prefs", prefs); rebuild(); }
 
 function rebuild() {
+  ahead = false;
   const allMode = prefs.mode === "champ" && prefs.all;
   document.body.className = `mode-${prefs.mode}${allMode ? " all-mode" : ""}${isGuest() ? " guest" : ""}`;
   const q = $("f-search").value.trim().toLowerCase();
@@ -276,7 +277,7 @@ function rebuild() {
       any(prefs.lane, c.lanes) && any(prefs.cls, c.tags) && (allMode || any(prefs.key, [c.key])) &&
       (!q || c.champ.toLowerCase().includes(q)) && !brokenVideos.has(c.id));
   }
-  if (prefs.review) deck = deck.filter((c) => (progress[c.id] ?? 0) < 3);
+  if (prefs.review) deck = deck.filter((c) => { const p = srs(c.id); return p && p.d <= Date.now() + LEARN_AHEAD; });
   const champs = new Set(deck.map((c) => c.champId)).size;
   $("count").textContent = prefs.mode === "rune" ? `${deck.length} runes`
     : prefs.mode === "item" ? `${deck.length} objets`
@@ -293,12 +294,98 @@ function updateStats() {
     return;
   }
   const all = prefs.mode === "champ" && prefs.all ? cards.champAll : cards[prefs.mode];
-  const known = all.filter((c) => (progress[c.id] ?? 0) >= 3).length;
-  $("stats").innerHTML = `<b>${known}</b> / ${all.length} cartes maîtrisées`;
+  const now = Date.now();
+  let known = 0, due = 0;
+  for (const c of all) { const p = srs(c.id); if (!p) continue; if (p.i >= MASTERED) known++; if (p.d <= now) due++; }
+  $("stats").innerHTML = `<b>${known}</b> / ${all.length} maîtrisées · <b>${due}</b> à revoir`;
   $("stats-bar").style.width = all.length ? `${(100 * known) / all.length}%` : "0";
 }
 
-// Tirage pondéré : les cartes ratées ou jamais vues sortent beaucoup plus souvent.
+// ---------- Répétition espacée (façon Anki) ----------
+// Chaque carte vue garde : i = intervalle en jours, e = facilité, d = date de la prochaine révision,
+// r = révisions réussies, l = oublis, s = étape d'apprentissage (0 ou 1).
+const MIN = 60e3, HOUR = 36e5, DAY = 864e5;
+const MASTERED = 21;            // maîtrisée quand l'intervalle atteint 3 semaines (comme les cartes « mûres » d'Anki)
+const LEARN_AHEAD = 20 * MIN;   // s'il n'y a plus rien, on montre en avance les cartes prévues dans les 20 min
+let ahead = false;              // « Continuer quand même » : réviser les cartes pas encore dues
+
+// Lit l'état d'une carte ; convertit l'ancien système à boîtes (0 à 5) sans perdre la progression
+function srs(id) {
+  const p = progress[id];
+  if (p == null) return null;
+  if (typeof p === "number") {
+    const ivl = [0, 1, 3, 7, 15, 30][p] || 0;
+    progress[id] = { i: ivl, e: 2.5, d: Date.now() + Math.random() * ivl * DAY, r: p, l: 0, s: 0 };
+  }
+  return progress[id];
+}
+
+// Calcule le nouvel état après une réponse : 0 À revoir, 1 Difficile, 2 Bien, 3 Facile
+function schedule(old, g, now = Date.now()) {
+  const p = old ? { ...old } : { i: 0, e: 2.5, d: now, r: 0, l: 0, s: 0 };
+  const learning = p.i < 1;
+  if (g === 0) {
+    if (!learning) p.l++;
+    p.e = Math.max(1.3, p.e - 0.2); p.i = 0; p.s = 0; p.d = now + MIN;
+    return p;
+  }
+  if (learning && g === 1) { p.d = now + 6 * MIN; return p; }
+  if (learning && g === 2 && p.s === 0) { p.s = 1; p.d = now + 10 * MIN; return p; }
+  if (learning) p.i = g === 3 ? 4 : 1;
+  else if (g === 1) { p.i = Math.max(1, p.i * 1.2); p.e = Math.max(1.3, p.e - 0.15); }
+  else if (g === 2) p.i = Math.max(p.i + 1, p.i * p.e);
+  else { p.i = Math.max(p.i + 1, p.i * p.e * 1.3); p.e += 0.15; }
+  if (p.i > 2) p.i *= 0.95 + Math.random() * 0.1; // petit décalage pour ne pas tout revoir le même jour
+  p.i = Math.round(p.i * 10) / 10;
+  p.s = 0; p.r++; p.d = now + p.i * DAY;
+  return p;
+}
+
+function fmtDelay(ms) {
+  if (ms < HOUR) return `${Math.max(1, Math.round(ms / MIN))} min`;
+  if (ms < DAY) return `${Math.round(ms / HOUR)} h`;
+  const d = ms / DAY;
+  if (d < 30) return `${Math.round(d)} j`;
+  if (d < 365) return `${Math.round(d / 30)} mois`;
+  return `${(d / 365).toFixed(1)} an`;
+}
+
+// Choisit la prochaine carte : d'abord celles à revoir (les plus en retard), puis des nouvelles,
+// puis celles prévues dans les 20 min. Sinon : « tout est révisé ».
+function pickCard() {
+  const now = Date.now();
+  const due = [], soon = [], fresh = [], later = [];
+  for (const c of deck) {
+    const p = srs(c.id);
+    if (!p) fresh.push(c);
+    else if (p.d <= now) due.push(c);
+    else if (p.d <= now + LEARN_AHEAD) soon.push(c);
+    else later.push(c);
+  }
+  const byDate = (a, b) => srs(a.id).d - srs(b.id).d;
+  const notLast = (list) => (list.length > 1 ? list.filter((c) => c.id !== lastId) : list);
+  if (due.length && !(due.length === 1 && due[0].id === lastId && fresh.length)) return notLast(due.sort(byDate))[0];
+  if (fresh.length) { const f = notLast(fresh); return f[Math.floor(Math.random() * f.length)]; }
+  if (due.length) return due[0];
+  if (soon.length) return notLast(soon.sort(byDate))[0];
+  if (ahead && later.length) return notLast(later.sort(byDate))[0];
+  return null;
+}
+
+function showDone() {
+  const now = Date.now();
+  const nextDue = Math.min(...deck.map((c) => srs(c.id).d));
+  current = null;
+  $("fr-video").pause();
+  $("card").classList.add("hidden");
+  $("hint").classList.add("hidden");
+  $("empty-text").innerHTML = `Bravo, tout est révisé pour l'instant !<br>Prochaine carte dans <b>${fmtDelay(nextDue - now)}</b>.`;
+  $("b-ahead").classList.remove("hidden");
+  $("empty").classList.remove("hidden");
+}
+// Quand une carte redevient due pendant l'écran « tout est révisé », on reprend tout seul
+setInterval(() => { if (!current && deck.length && !$("empty").classList.contains("hidden") && pickCard()) next(); }, 30e3);
+
 function next() {
   closeDetail();
   $("card").classList.remove("flipped");
@@ -310,15 +397,15 @@ function next() {
     current = null;
     $("fr-video").pause();
     $("card").classList.add("hidden");
+    $("empty-text").textContent = prefs.review ? "Aucune carte à revoir maintenant." : "Aucune carte avec ces filtres.";
+    $("b-ahead").classList.add("hidden");
     $("empty").classList.remove("hidden");
     return;
   }
+  const pick = isGuest() ? deck[Math.floor(Math.random() * deck.length)] : pickCard();
+  if (!pick) return showDone();
   $("empty").classList.add("hidden");
-  const pool = deck.length > 1 ? deck.filter((c) => c.id !== lastId) : deck;
-  const weights = pool.map((c) => 2 ** (5 - (progress[c.id] ?? 0)));
-  let r = Math.random() * weights.reduce((a, b) => a + b, 0);
-  current = pool[pool.length - 1];
-  for (let i = 0; i < pool.length; i++) { r -= weights[i]; if (r <= 0) { current = pool[i]; break; } }
+  current = pick;
   lastId = current.id;
   setTimeout(show, 150); // laisse la carte se retourner avant de changer le contenu
 }
@@ -424,6 +511,7 @@ function flip() {
   $("card").classList.toggle("flipped");
   const flipped = $("card").classList.contains("flipped");
   $("answer").classList.toggle("hidden", !flipped);
+  if (flipped) updateGradeLabels();
   $("hint").classList.toggle("hidden", flipped);
   $("spellbar").classList.toggle("hidden", !flipped || !["champ", "video"].includes(current.type));
   showMatchups(flipped && ["champ", "video"].includes(current.type) ? current.champId : null);
@@ -443,15 +531,23 @@ function showMatchups(champId) {
     <div class="mu-col bad"><h4>Mauvais matchups <em>${MU_LANE[m.lane] || ""}</em></h4><div class="mu-list">${list(m.bad)}</div></div>`;
 }
 
-function answer(good) {
+function answer(g) {
   if (!current || !$("card").classList.contains("flipped")) return;
   if (isGuest()) return next(); // invité : on passe juste à la suivante
-  const box = progress[current.id] ?? 0;
-  progress[current.id] = good ? Math.min(5, box + 1) : 0;
+  progress[current.id] = schedule(srs(current.id), g);
   persist();
   updateStats();
-  if (prefs.review && good && progress[current.id] >= 3) deck = deck.filter((c) => c.id !== current.id);
+  if (prefs.review && progress[current.id].d > Date.now() + LEARN_AHEAD) deck = deck.filter((c) => c.id !== current.id);
   next();
+}
+
+// Affiche sous chaque bouton le délai avant de revoir la carte
+function updateGradeLabels() {
+  if (!current) return;
+  const now = Date.now(), p = srs(current.id);
+  document.querySelectorAll("#answer .grade").forEach((b) => {
+    b.querySelector("small").textContent = fmtDelay(schedule(p, +b.dataset.g, now).d - now);
+  });
 }
 
 // ---------- Fiche détaillée d'un sort (touches P A Z E R) ----------
@@ -625,9 +721,9 @@ function wire() {
     if (e.target.closest("details, #edit, .all-row")) return;
     flip();
   };
-  $("b-again").onclick = () => answer(false);
-  $("b-good").onclick = () => answer(true);
-  $("b-next").onclick = () => answer(true);
+  document.querySelectorAll("#answer .grade").forEach((b) => (b.onclick = () => answer(+b.dataset.g)));
+  $("b-next").onclick = () => answer(2);
+  $("b-ahead").onclick = () => { ahead = true; next(); };
   $("edit").onclick = () => {
     const id = current.id.replace(/^vid_/, ""); // même description pour la carte classique et la vidéo
     const text = prompt("Ta description courte pour cette carte (vide = remettre celle d'origine) :", custom[id] || current.short);
@@ -646,8 +742,10 @@ function wire() {
     if (e.target.tagName === "INPUT") return;
     if (isDetail() && ["Space", "Enter"].includes(e.code)) { e.preventDefault(); closeDetail(); return; }
     if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); flip(); }
-    else if (e.key === "1" || e.key === "ArrowLeft") answer(false);
-    else if (e.key === "2" || e.key === "ArrowRight") answer(true);
+    // chiffres 1 à 4 (rangée du haut sans Maj sur AZERTY, ou pavé numérique) ; flèches = À revoir / Bien
+    else if (/^(Digit|Numpad)[1-4]$/.test(e.code)) answer(+e.code.slice(-1) - 1);
+    else if (e.key === "ArrowLeft") answer(0);
+    else if (e.key === "ArrowRight") answer(2);
     else if (e.key === "Escape") closeDetail();
     else if (KEY_FROM_PRESS[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey && !e.altKey) {
       // le détail reste affiché tant que la touche est enfoncée
