@@ -20,6 +20,7 @@
     <button data-mode="item">Objets</button>
   </nav>
   <div class="topbar-right">
+    <div id="account"></div>
     <div class="mastery">
       <div class="mastery-text" id="stats"></div>
       <div class="bar"><div id="stats-bar"></div></div>
@@ -99,6 +100,7 @@
     <div id="answer" class="hidden">
       <button id="b-again" class="btn again">À revoir <kbd>1</kbd></button>
       <button id="b-good" class="btn good">Je savais <kbd>2</kbd></button>
+      <button id="b-next" class="btn good">Suivante <kbd>→</kbd></button>
     </div>
   </div>
   <div id="empty" class="hidden">Aucune carte avec ces filtres.</div>
@@ -154,6 +156,8 @@
 </footer>
 
 <script src="data/data.js"></script>
+<script src="firebase-config.js"></script>
+<script src="account.js"></script>
 <script src="descriptions.js"></script>
 <script src="runes-desc.js"></script>
 <script src="items-desc.js"></script>

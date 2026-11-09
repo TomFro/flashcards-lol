@@ -22,6 +22,15 @@ const store = {
 };
 const progress = store.get("flc_progress", {});   // id de carte -> boîte 0..5
 const custom = store.get("flc_custom", {});       // id de carte -> description modifiée
+const isGuest = () => window.Account && Account.mode === "guest";
+function replaceObj(o, n) { for (const k of Object.keys(o)) delete o[k]; Object.assign(o, n || {}); }
+// Enregistre la progression : navigateur (+ compte si connecté). Rien pour un invité.
+function persist() {
+  if (isGuest()) return;
+  store.set("flc_progress", progress);
+  store.set("flc_custom", custom);
+  if (Account.mode === "user") Account.save({ progress, custom });
+}
 const prefs = Object.assign(
   { mode: "champ", all: true, lane: [], cls: [], key: [], tree: [], slot: [], itype: ["legendary", "boots"], irole: [], icon: false, name: false, review: false },
   store.get("flc_prefs", {}));
@@ -251,7 +260,7 @@ function saveAndRebuild() { store.set("flc_prefs", prefs); rebuild(); }
 
 function rebuild() {
   const allMode = prefs.mode === "champ" && prefs.all;
-  document.body.className = `mode-${prefs.mode}${allMode ? " all-mode" : ""}`;
+  document.body.className = `mode-${prefs.mode}${allMode ? " all-mode" : ""}${isGuest() ? " guest" : ""}`;
   const q = $("f-search").value.trim().toLowerCase();
   const any = (sel, vals) => sel.length === 0 || vals.some((v) => sel.includes(v));
   if (prefs.mode === "rune") {
@@ -274,6 +283,11 @@ function rebuild() {
 }
 
 function updateStats() {
+  if (isGuest()) {
+    $("stats").innerHTML = "<b>Mode invité</b> · non enregistré";
+    $("stats-bar").style.width = "0";
+    return;
+  }
   const all = prefs.mode === "champ" && prefs.all ? cards.champAll : cards[prefs.mode];
   const known = all.filter((c) => (progress[c.id] ?? 0) >= 3).length;
   $("stats").innerHTML = `<b>${known}</b> / ${all.length} cartes maîtrisées`;
@@ -410,9 +424,10 @@ function flip() {
 
 function answer(good) {
   if (!current || !$("card").classList.contains("flipped")) return;
+  if (isGuest()) return next(); // invité : on passe juste à la suivante
   const box = progress[current.id] ?? 0;
   progress[current.id] = good ? Math.min(5, box + 1) : 0;
-  store.set("flc_progress", progress);
+  persist();
   updateStats();
   if (prefs.review && good && progress[current.id] >= 3) deck = deck.filter((c) => c.id !== current.id);
   next();
@@ -583,18 +598,19 @@ function wire() {
   };
   $("b-again").onclick = () => answer(false);
   $("b-good").onclick = () => answer(true);
+  $("b-next").onclick = () => answer(true);
   $("edit").onclick = () => {
     const id = current.id.replace(/^vid_/, ""); // même description pour la carte classique et la vidéo
     const text = prompt("Ta description courte pour cette carte (vide = remettre celle d'origine) :", custom[id] || current.short);
     if (text === null) return;
     if (text.trim()) custom[id] = text.trim(); else delete custom[id];
-    store.set("flc_custom", custom);
+    persist();
     show();
   };
   $("reset").onclick = () => {
     if (!confirm("Effacer toute ta progression ?")) return;
     for (const k of Object.keys(progress)) delete progress[k];
-    store.set("flc_progress", progress);
+    persist();
     rebuild();
   };
   document.addEventListener("keydown", (e) => {
@@ -703,6 +719,59 @@ async function downloadSection() {
   if (failed) $("dl-status").textContent += ` · ${failed} fichier(s) introuvable(s)`;
 }
 
+// ---------- Comptes ----------
+let lastMode = null;
+function renderAccount() {
+  const box = $("account");
+  const mode = Account.mode;
+  if (mode === "local") { box.innerHTML = ""; return; }
+  if (mode === "guest") {
+    box.innerHTML = `<button id="acc-login" class="acc-btn">Se connecter</button>
+      <div id="acc-menu" class="hidden">
+        <button data-p="google"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3zM12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22zM6.4 14a6 6 0 0 1 0-3.9V7.5H3.1a10 10 0 0 0 0 9zM12 6c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.5L6.4 10C7.2 7.7 9.4 6 12 6z"/></svg>Google</button>
+        <button data-p="github"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.3 4.7-4.6 5 .4.3.7.9.7 1.9V21c0 .3.2.6.7.5A10 10 0 0 0 12 2z"/></svg>GitHub</button>
+      </div>`;
+    $("acc-login").onclick = (e) => { e.stopPropagation(); $("acc-menu").classList.toggle("hidden"); };
+    $("acc-menu").querySelectorAll("button").forEach((b) => (b.onclick = async () => {
+      $("acc-menu").classList.add("hidden");
+      try { await Account.signIn(b.dataset.p); }
+      catch (err) { $("banner").textContent = err.message || "Connexion impossible."; $("banner").classList.remove("hidden"); }
+    }));
+    return;
+  }
+  const u = Account.user;
+  box.innerHTML = `<div class="acc-user">${u.photoURL ? `<img src="${u.photoURL}" alt="">` : ""}<span></span>
+    <button id="acc-logout" class="link">Déconnexion</button></div>`;
+  box.querySelector("span").textContent = u.displayName || u.email || "Connecté";
+  $("acc-logout").onclick = () => Account.signOut();
+}
+
+async function onAccountChange(mode) {
+  if (mode === "guest") {
+    if (lastMode === "user") { store.set("flc_progress", {}); store.set("flc_custom", {}); } // déconnexion : on ne laisse rien
+    replaceObj(progress, {});
+    replaceObj(custom, {});
+  } else if (mode === "user") {
+    const localCopy = { progress: store.get("flc_progress", {}), custom: store.get("flc_custom", {}) };
+    const cloud = await Account.load().catch(() => null);
+    if (cloud && (cloud.progress || cloud.custom)) {
+      replaceObj(progress, cloud.progress);
+      replaceObj(custom, cloud.custom);
+      store.set("flc_progress", progress);
+      store.set("flc_custom", custom);
+    } else {
+      // première connexion : on reprend la progression déjà faite sur cet appareil
+      replaceObj(progress, localCopy.progress);
+      replaceObj(custom, localCopy.custom);
+      persist();
+    }
+  }
+  lastMode = mode;
+  renderAccount();
+  if (cards.champ.length) rebuild();
+}
+document.addEventListener("click", () => { const m = document.getElementById("acc-menu"); if (m) m.classList.add("hidden"); });
+
 load()
   .then(() => {
     $("loading").classList.add("hidden");
@@ -711,6 +780,10 @@ load()
     wire();
     rebuild();
     checkUpdate();
+    Account.onChange(onAccountChange);
+    if (Account.mode === "guest") onAccountChange("guest");
+    renderAccount();
+    Account.init();
     $("dl-btn").onclick = downloadSection;
     updateDlButton();
     if (location.protocol.startsWith("http") && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});

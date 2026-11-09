@@ -381,3 +381,27 @@ body.all-mode .key-group { display: none !important; }
   #dl-status { text-align: center; }
 }
 .mode-video .keys button:first-child { display: none; }
+
+/* ---------- Comptes ---------- */
+#account { position: relative; }
+#account:empty { display: none; }
+.acc-btn {
+  font-family: var(--title); font-weight: 700; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; cursor: pointer;
+  padding: 7px 16px; color: var(--gold1); background: linear-gradient(180deg, #3c3014, #1e2328); border: 1px solid var(--gold2);
+}
+.acc-btn:hover { box-shadow: 0 0 12px #c89b3c55; }
+#acc-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; display: flex; flex-direction: column; gap: 4px; padding: 6px;
+  background: var(--night); border: 1px solid var(--gold4); box-shadow: 0 10px 30px #000a; min-width: 170px; }
+#acc-menu.hidden { display: none; }
+#acc-menu button { display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; font-family: var(--text); font-size: 13px;
+  color: var(--gold1); background: var(--panel); border: 1px solid var(--gold5); text-align: left; }
+#acc-menu button:hover { border-color: var(--gold2); }
+#acc-menu svg { width: 18px; height: 18px; }
+.acc-user { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--gold1); }
+.acc-user img { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--gold2); }
+.acc-user .link { margin: 0; font-size: 11px; }
+/* invité : pas de suivi de progression */
+#b-next { display: none; }
+body.guest #b-next { display: inline-block; }
+body.guest #b-again, body.guest #b-good, body.guest #edit, body.guest #reset, body.guest .switch:has(#o-review) { display: none !important; }
+body.guest .topbar-right .bar { display: none; }
