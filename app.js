@@ -775,7 +775,8 @@ function renderAccount() {
   const u = Account.user;
   const offline = mode === "offline";
   box.innerHTML = `<div class="acc-user">${u.photoURL ? `<img src="${u.photoURL}" alt="" onerror="this.remove()">` : ""}<span></span>
-    ${offline ? `<em class="acc-off" title="Ta progression est gardée sur cet appareil et sera envoyée sur ton compte au retour d'internet">hors ligne</em>`
+    ${offline && Account.restoring ? `<em class="acc-off">connexion…</em>`
+      : offline ? `<em class="acc-off" title="Ta progression est gardée sur cet appareil et sera envoyée sur ton compte au retour d'internet">hors ligne</em>`
               : `<button id="acc-logout" class="link">Déconnexion</button>`}</div>`;
   box.querySelector("span").textContent = u.displayName || u.email || "Connecté";
   if (!offline) $("acc-logout").onclick = () => Account.signOut();
@@ -844,7 +845,7 @@ load()
     rebuild();
     checkUpdate();
     Account.onChange(onAccountChange);
-    if (Account.mode === "guest") onAccountChange("guest");
+    if (Account.mode !== "local") onAccountChange(Account.mode);
     renderAccount();
     Account.init();
     $("dl-btn").onclick = downloadSection;

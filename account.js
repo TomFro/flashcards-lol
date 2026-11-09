@@ -9,18 +9,19 @@ window.Account = (() => {
   const SDK = "https://www.gstatic.com/firebasejs/10.12.2";
   const cfg = window.FIREBASE_CONFIG;
   const enabled = !!cfg && location.protocol.startsWith("http");
-  let mode = enabled ? "guest" : "local";
-  let user = null, db = null, saveTimer = null, pending = null, writes = 0, started = false;
   const LAST = "flc_last_user"; // dernier compte connecté sur cet appareil, pour le mode hors ligne
   const readLast = () => { try { return JSON.parse(localStorage.getItem(LAST)); } catch { return null; } };
+  // Déjà connecté sur cet appareil : on affiche tout de suite le compte pendant que Firebase se charge
+  let user = enabled ? readLast() : null;
+  let mode = !enabled ? "local" : user ? "offline" : "guest";
+  let restoring = mode === "offline";
+  let db = null, saveTimer = null, pending = null, writes = 0, started = false;
   const listeners = [];
   const emit = () => listeners.forEach((fn) => fn(mode, user));
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
       const s = document.createElement("script");
-      // crossOrigin : sinon le service worker ne peut pas garder le code de Firebase pour le hors ligne
-      s.crossOrigin = "anonymous";
       s.src = src; s.onload = () => resolve(); s.onerror = () => { s.remove(); reject(new Error(src)); };
       document.head.appendChild(s);
     });
@@ -42,7 +43,8 @@ window.Account = (() => {
       // Pas d'internet et code de Firebase pas encore gardé : si quelqu'un s'est déjà connecté
       // sur cet appareil, on continue avec sa progression locale, sinon on reste en invité.
       const last = readLast();
-      if (last && mode !== "offline") { user = last; mode = "offline"; emit(); }
+      restoring = false;
+      if (last) { user = last; mode = "offline"; emit(); }
       window.addEventListener("online", init, { once: true });
       return;
     }
@@ -50,10 +52,12 @@ window.Account = (() => {
     if (!firebase.apps.length) firebase.initializeApp(cfg);
     db = firebase.firestore();
     db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+    try { firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {}); } catch {}
     firebase.auth().getRedirectResult().catch(() => {});
     firebase.auth().onAuthStateChanged(async (u) => {
       user = u;
       mode = u ? "user" : "guest";
+      restoring = false;
       if (u) {
         try { localStorage.setItem(LAST, JSON.stringify({ uid: u.uid, displayName: u.displayName, email: u.email, photoURL: u.photoURL })); } catch {}
       }
@@ -110,6 +114,7 @@ window.Account = (() => {
     init, signIn, signOut, load, save,
     get mode() { return mode; },
     get user() { return user; },
+    get restoring() { return restoring; },
     onChange(fn) { listeners.push(fn); },
   };
 })();
