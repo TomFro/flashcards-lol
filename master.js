@@ -641,6 +641,10 @@ const Master = (() => {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }).catch((e) => console.error("Profil public non enregistré", e));
   }
+  // message d'erreur clair : le cas le plus courant est des règles Firebase pas encore publiées
+  const loadError = (e) => `<div class="m-none">${e && e.code === "permission-denied"
+    ? "Firebase refuse l'accès : les règles de la base (fichier firestore.rules) ne sont pas encore publiées dans la console Firebase."
+    : `Impossible de charger${e && e.code ? ` (${esc(e.code)})` : ""}. Vérifie ta connexion et réessaie.`}</div>`;
   const needOnline = (what) => `<div class="m-none">${isGuest() ? `Connecte-toi pour ${what}.` : `Il faut être connecté à internet pour ${what}.`}</div>`;
 
   // ---------- Joueurs ----------
@@ -653,7 +657,7 @@ const Master = (() => {
     try {
       const snap = await Account.db.collection("profiles").orderBy("updatedAt", "desc").limit(50).get();
       players = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
-    } catch (e) { console.error(e); $("m-plist").innerHTML = `<div class="m-none">Impossible de charger les joueurs.</div>`; return; }
+    } catch (e) { console.error(e); if ($("m-plist")) $("m-plist").innerHTML = loadError(e); return; }
     if (ui.tab !== "players" || viewing) return;
     const me = Account.user && Account.user.uid;
     $("m-plist").innerHTML = players.length ? players.map((p) => {
@@ -761,7 +765,7 @@ const Master = (() => {
       drawListings();
     } catch (e) {
       console.error(e);
-      $("mk-list").innerHTML = `<div class="m-none">Impossible de charger le marché.</div>`;
+      if ($("mk-list")) { $("mk-list").innerHTML = loadError(e); $("mk-mine").innerHTML = ""; }
     }
   }
 
