@@ -396,8 +396,55 @@ function showDone() {
 // Quand une carte redevient due pendant l'écran « tout est révisé », on reprend tout seul
 setInterval(() => { if (!current && deck.length && !$("empty").classList.contains("hidden") && pickCard()) next(); }, 30e3);
 
+// Mode étude : les 4 sorts du champion recherché sur le même écran (vidéo + descriptions)
+const STUDY_MAX = 3;
+function renderStudy() {
+  current = null;
+  $("fr-video").pause();
+  ["card", "answer", "hint", "spellbar", "matchups", "empty"].forEach((id) => $(id).classList.add("hidden"));
+  const box = $("study");
+  box.classList.remove("hidden");
+  if (!deck.length) { box.innerHTML = `<div class="study-note">Aucun champion ne correspond à cette recherche.</div>`; return; }
+  const champs = [...new Set(deck.map((c) => c.champId))];
+  box.innerHTML = champs.length > STUDY_MAX
+    ? `<div class="study-note">${champs.length} champions correspondent : voici les ${STUDY_MAX} premiers, précise la recherche pour en voir un autre.</div>` : "";
+  for (const id of champs.slice(0, STUDY_MAX)) {
+    const list = deck.filter((c) => c.champId === id);
+    const sec = document.createElement("section");
+    sec.className = "study-champ";
+    sec.innerHTML = `<h2><img src="${list[0].img}" alt=""><span></span></h2><div class="study-grid"></div>`;
+    sec.querySelector("h2 span").textContent = list[0].champ;
+    for (const c of list) {
+      const tile = document.createElement("article");
+      tile.className = "study-tile";
+      tile.innerHTML = `<div class="study-video"><video muted loop playsinline autoplay preload="metadata"></video>
+          <div class="key"><b></b></div><em class="study-missing hidden">Vidéo indisponible</em></div>
+        <div class="study-text"><div class="study-head"><img src="${c.icon}" alt=""><b></b></div>
+          <p class="study-short"></p>${c.cd && c.cd.length ? `<div class="study-cd">CD ${c.cd.join(" / ")} s</div>` : ""}
+          <p class="study-official"></p></div>`;
+      tile.querySelector(".key b").textContent = c.key;
+      tile.querySelector(".study-head b").textContent = c.name;
+      tile.querySelector(".study-short").textContent = custom[c.id.replace(/^vid_/, "")] || c.short;
+      tile.querySelector(".study-official").textContent = c.official;
+      const v = tile.querySelector("video");
+      let i = 0;
+      v.onerror = () => {
+        i++;
+        if (i < c.videos.length) { v.src = c.videos[i]; v.play().catch(() => {}); }
+        else tile.querySelector(".study-missing").classList.remove("hidden");
+      };
+      v.src = c.videos[0];
+      v.play().catch(() => {});
+      sec.querySelector(".study-grid").appendChild(tile);
+    }
+    box.appendChild(sec);
+  }
+}
+
 function next(step = 1) {
   closeDetail();
+  if (studyMode()) return renderStudy();
+  if (!$("study").classList.contains("hidden")) { $("study").classList.add("hidden"); $("study").innerHTML = ""; }
   $("card").classList.remove("flipped");
   $("answer").classList.toggle("hidden", !studyMode());
   $("spellbar").classList.add("hidden");

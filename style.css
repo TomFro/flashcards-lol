@@ -452,3 +452,27 @@ body.guest .topbar-right .bar { display: none; }
 .good .mu img { border-color: #0acf8388; } .bad .mu img { border-color: #e8405788; }
 .mu span { font-size: 10px; color: var(--gold1); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 720px) { #matchups { grid-template-columns: 1fr; gap: 10px; } }
+
+/* ---------- Mode étude des vidéos : les 4 sorts sur le même écran ---------- */
+#study { width: min(1480px, 100%); display: flex; flex-direction: column; gap: 28px; }
+.study-note { text-align: center; color: var(--grey1); font-size: 14px; }
+.study-champ h2 { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 0 0 14px; font-family: var(--title); font-size: 26px; letter-spacing: 3px; text-transform: uppercase; color: var(--gold1); }
+.study-champ h2 img { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; object-position: center 15%; border: 2px solid var(--gold2); }
+.study-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+@media (max-width: 1150px) { .study-grid { grid-template-columns: repeat(2, 1fr); } }
+.study-tile { display: flex; flex-direction: column; background: radial-gradient(ellipse at 50% 0%, #0b3b4d 0%, #091428 55%, #010a13 100%) padding-box, var(--frame) border-box; border: 2px solid transparent; box-shadow: 0 12px 40px #000a; }
+.study-video { position: relative; aspect-ratio: 16 / 9; background: #000; }
+.study-video video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.study-video .key { position: absolute; top: 10px; left: 10px; }
+.study-missing { position: absolute; inset: 0; display: grid; place-items: center; font-style: normal; color: var(--grey1); font-size: 13px; }
+.study-text { padding: 12px 16px 16px; }
+.study-head { display: flex; align-items: center; gap: 10px; }
+.study-head img { width: 32px; height: 32px; border: 1px solid var(--gold4); }
+.study-head b { font-family: var(--title); font-size: 16px; color: var(--gold1); }
+.study-short { margin: 10px 0 6px; font-size: 14px; line-height: 1.45; color: var(--gold1); }
+.study-cd { font-size: 12px; color: var(--blue2); margin-bottom: 8px; }
+.study-official { margin: 0; padding-top: 8px; border-top: 1px solid #46371488; font-size: 12.5px; line-height: 1.5; color: #c8c2b0; }
+@media (max-width: 720px) {
+  .study-grid { grid-template-columns: 1fr; }
+  .study-champ h2 { font-size: 20px; }
+}
