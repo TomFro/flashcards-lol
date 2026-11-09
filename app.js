@@ -23,6 +23,9 @@ const store = {
 const progress = store.get("flc_progress", {});   // id de carte -> boîte 0..5
 const custom = store.get("flc_custom", {});       // id de carte -> description modifiée
 const isGuest = () => window.Account && Account.mode === "guest";
+// Onglet Vidéos + un champion tapé dans la recherche : on revoit toutes ses vidéos dans l'ordre, sans deviner
+const studyMode = () => prefs.mode === "video" && $("f-search").value.trim() !== "";
+let studyIdx = -1;
 const isOnlineUser = () => window.Account && (Account.mode === "user" || Account.mode === "offline");
 function replaceObj(o, n) { for (const k of Object.keys(o)) delete o[k]; Object.assign(o, n || {}); }
 // Enregistre la progression : navigateur (+ compte si connecté). Rien pour un invité.
@@ -265,7 +268,8 @@ function saveAndRebuild() { store.set("flc_prefs", prefs); rebuild(); }
 function rebuild() {
   ahead = false;
   const allMode = prefs.mode === "champ" && prefs.all;
-  document.body.className = `mode-${prefs.mode}${allMode ? " all-mode" : ""}${isGuest() ? " guest" : ""}`;
+  document.body.className = `mode-${prefs.mode}${allMode ? " all-mode" : ""}${isGuest() ? " guest" : ""}${studyMode() ? " study" : ""}`;
+  $("f-search").placeholder = prefs.mode === "video" ? "Taper un champion pour revoir ses vidéos…" : "Chercher un champion…";
   const q = $("f-search").value.trim().toLowerCase();
   const any = (sel, vals) => sel.length === 0 || vals.some((v) => sel.includes(v));
   if (prefs.mode === "rune") {
@@ -277,11 +281,17 @@ function rebuild() {
       any(prefs.lane, c.lanes) && any(prefs.cls, c.tags) && (allMode || any(prefs.key, [c.key])) &&
       (!q || c.champ.toLowerCase().includes(q)) && !brokenVideos.has(c.id));
   }
-  if (prefs.review) deck = deck.filter((c) => { const p = srs(c.id); return p && p.d <= Date.now() + LEARN_AHEAD; });
+  if (prefs.review && !studyMode()) deck = deck.filter((c) => { const p = srs(c.id); return p && p.d <= Date.now() + LEARN_AHEAD; });
+  if (studyMode()) {
+    deck.sort((a, b) => a.champ.localeCompare(b.champ) || "QWER".indexOf(a.key) - "QWER".indexOf(b.key));
+    studyIdx = -1;
+  }
   const champs = new Set(deck.map((c) => c.champId)).size;
   $("count").textContent = prefs.mode === "rune" ? `${deck.length} runes`
     : prefs.mode === "item" ? `${deck.length} objets`
-    : allMode ? `${deck.length} champions` : `${deck.length} cartes (${champs} champions)`;
+    : allMode ? `${deck.length} champions`
+    : studyMode() ? `Mode étude : ${deck.length} vidéos (${champs} champion${champs > 1 ? "s" : ""})`
+    : `${deck.length} cartes (${champs} champions)`;
   updateStats();
   if ($("dl-btn")) updateDlButton();
   next();
@@ -386,13 +396,13 @@ function showDone() {
 // Quand une carte redevient due pendant l'écran « tout est révisé », on reprend tout seul
 setInterval(() => { if (!current && deck.length && !$("empty").classList.contains("hidden") && pickCard()) next(); }, 30e3);
 
-function next() {
+function next(step = 1) {
   closeDetail();
   $("card").classList.remove("flipped");
-  $("answer").classList.add("hidden");
+  $("answer").classList.toggle("hidden", !studyMode());
   $("spellbar").classList.add("hidden");
   $("matchups").classList.add("hidden");
-  $("hint").classList.toggle("hidden", deck.length === 0);
+  $("hint").classList.toggle("hidden", deck.length === 0 || studyMode());
   if (deck.length === 0) {
     current = null;
     $("fr-video").pause();
@@ -402,7 +412,8 @@ function next() {
     $("empty").classList.remove("hidden");
     return;
   }
-  const pick = isGuest() ? deck[Math.floor(Math.random() * deck.length)] : pickCard();
+  const pick = studyMode() ? deck[(studyIdx = (studyIdx + step + deck.length) % deck.length)]
+    : isGuest() ? deck[Math.floor(Math.random() * deck.length)] : pickCard();
   if (!pick) return showDone();
   $("empty").classList.add("hidden");
   current = pick;
@@ -420,6 +431,7 @@ function playVideo(c) {
     if (i < c.videos.length) { v.src = c.videos[i]; v.play().catch(() => {}); return; }
     brokenVideos.add(c.id);
     deck = deck.filter((x) => x.id !== c.id);
+    if (studyMode()) studyIdx--; // la carte suivante a pris sa place dans la liste
     next();
   };
   v.src = c.videos[0];
@@ -455,6 +467,13 @@ function show() {
     keyBox.classList.remove("hidden");
     $("fr-spell").src = c.icon;
     $("fr-spell").classList.toggle("hidden", !prefs.icon);
+  } else if (isVideo && studyMode()) {
+    $("fr-name").textContent = c.champ;
+    $("fr-q").textContent = `${c.name} · ${studyIdx + 1} / ${deck.length}`;
+    keyBox.querySelector("b").textContent = c.key;
+    keyBox.classList.remove("hidden");
+    $("fr-spell").classList.add("hidden");
+    $("bk-portrait").src = c.img;
   } else if (isVideo) {
     $("fr-name").textContent = "Quel champion ?";
     $("fr-q").textContent = "Et quel sort ?";
@@ -486,7 +505,7 @@ function show() {
     ? `<div class="cd-label">Cooldown (secondes)</div>` + c.cd.map((x) => `<span class="cd">${x}</span>`).join("")
     : "";
   $("bk-official").textContent = c.official;
-  $("bk-details").open = false;
+  $("bk-details").open = studyMode(); // en mode étude, la vraie description est affichée sous la rapide
 }
 
 // Verso du mode "tous les sorts" : une ligne par sort, cliquable pour les détails
@@ -510,9 +529,9 @@ function flip() {
   if (!current) return;
   $("card").classList.toggle("flipped");
   const flipped = $("card").classList.contains("flipped");
-  $("answer").classList.toggle("hidden", !flipped);
+  $("answer").classList.toggle("hidden", !flipped && !studyMode());
   if (flipped) updateGradeLabels();
-  $("hint").classList.toggle("hidden", flipped);
+  $("hint").classList.toggle("hidden", flipped || studyMode());
   $("spellbar").classList.toggle("hidden", !flipped || !["champ", "video"].includes(current.type));
   showMatchups(flipped && ["champ", "video"].includes(current.type) ? current.champId : null);
 }
@@ -532,6 +551,7 @@ function showMatchups(champId) {
 }
 
 function answer(g) {
+  if (studyMode()) return next(); // mode étude : rien n'est noté, on passe à la suivante
   if (!current || !$("card").classList.contains("flipped")) return;
   if (isGuest()) return next(); // invité : on passe juste à la suivante
   progress[current.id] = schedule(srs(current.id), g);
@@ -723,6 +743,7 @@ function wire() {
   };
   document.querySelectorAll("#answer .grade").forEach((b) => (b.onclick = () => answer(+b.dataset.g)));
   $("b-next").onclick = () => answer(2);
+  $("b-prev").onclick = () => next(-1);
   $("b-ahead").onclick = () => { ahead = true; next(); };
   $("edit").onclick = () => {
     const id = current.id.replace(/^vid_/, ""); // même description pour la carte classique et la vidéo
@@ -744,7 +765,7 @@ function wire() {
     if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); flip(); }
     // chiffres 1 à 4 (rangée du haut sans Maj sur AZERTY, ou pavé numérique) ; flèches = À revoir / Bien
     else if (/^(Digit|Numpad)[1-4]$/.test(e.code)) answer(+e.code.slice(-1) - 1);
-    else if (e.key === "ArrowLeft") answer(0);
+    else if (e.key === "ArrowLeft") { if (studyMode()) next(-1); else answer(0); }
     else if (e.key === "ArrowRight") answer(2);
     else if (e.key === "Escape") closeDetail();
     else if (KEY_FROM_PRESS[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey && !e.altKey) {

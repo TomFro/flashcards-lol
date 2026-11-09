@@ -422,8 +422,19 @@ body.all-mode .key-group { display: none !important; }
 .acc-user .link { margin: 0; font-size: 11px; }
 .acc-off { font-style: normal; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--gold3); border: 1px solid #c89b3c66; border-radius: 10px; padding: 2px 8px; cursor: help; }
 /* invité : pas de suivi de progression */
-#b-next { display: none; }
+#b-next, #b-prev { display: none; }
 body.guest #b-next { display: inline-block; }
+/* Mode étude des vidéos : on regarde sans deviner, on avance avec Précédente / Suivante */
+body.study #b-next, body.study #b-prev { display: inline-block; }
+body.study #answer .grade { display: none !important; }
+body.study #bk-desc { flex: none; font-size: 17px; margin: 12px 0 10px; }
+body.study #bk-details { flex: 1; max-height: none; font-size: 13px; line-height: 1.5; color: #d8d2c0; }
+body.mode-video.study .card { height: 520px; }
+@media (max-width: 720px) {
+  body.study #answer { grid-template-columns: 1fr 1fr; }
+  body.mode-video.study .card { height: 280px; }
+  body.mode-video.study .card.flipped { height: 500px; }
+}
 body.guest #b-again, body.guest #b-good, body.guest #b-hard, body.guest #b-easy, body.guest #edit, body.guest #reset, body.guest .switch:has(#o-review) { display: none !important; }
 body.guest .topbar-right .bar { display: none; }
 
