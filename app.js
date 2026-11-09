@@ -23,8 +23,10 @@ const store = {
 const progress = store.get("flc_progress", {});   // id de carte -> boîte 0..5
 const custom = store.get("flc_custom", {});       // id de carte -> description modifiée
 const prefs = Object.assign(
-  { mode: "champ", all: false, lane: [], cls: [], key: [], tree: [], slot: [], itype: ["legendary", "boots"], irole: [], icon: false, name: false, review: false },
+  { mode: "champ", all: true, lane: [], cls: [], key: [], tree: [], slot: [], itype: ["legendary", "boots"], irole: [], icon: false, name: false, review: false },
   store.get("flc_prefs", {}));
+// v2 : "tous les sorts d'un coup" devient le mode par défaut, même pour les réglages déjà enregistrés
+if (prefs.v !== 2) { prefs.all = true; prefs.v = 2; store.set("flc_prefs", prefs); }
 
 let version = "", local = false;
 let cards = { champ: [], champAll: [], video: [], rune: [], item: [] };
