@@ -212,8 +212,11 @@ function buildItems(items) {
     const stats = statsHtml.split(/<br\s*\/?>/i).map(clean).filter(Boolean);
     const effects = [...(it.description || "").matchAll(/<(passive|active)>([\s\S]*?)<\/\1>/g)].map((m) => clean(m[2])).filter(Boolean);
     const roles = desc.who ? desc.who.split(" ") : guessRoles(tags);
+    // bottes : 2 = bottes de base améliorées une fois, 3 = bottes améliorées (T3)
+    const isT2 = (fid) => { const f = (items.data || {})[fid]; return f && (f.tags || []).includes("Boots") && f.from && f.from.length; };
+    const btier = itype === "boots" ? (it.from.some(isT2) ? 3 : 2) : 0;
     cards.item.push({
-      id: `item_${id}`, type: "item", itype, name: it.name, icon: url.item(it.image.full), img: url.item(it.image.full),
+      id: `item_${id}`, type: "item", itype, btier, bfrom: btier === 3 ? it.from.find(isT2) : null, name: it.name, icon: url.item(it.image.full), img: url.item(it.image.full),
       gold: it.gold.total, stats, roles, note: desc.note || "",
       short: desc.d || clean(it.plaintext) || firstEffect(it.description) || (effects.length ? `Effets : ${[...new Set(effects)].join(", ")}` : "Objet de stats"),
       official: clean((it.description || "").replace(/<br\s*\/?>/gi, " · ")),

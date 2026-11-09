@@ -666,3 +666,9 @@ body.mode-master .stage, body.mode-master #filters, body.mode-master #dl, body.m
   #m-reveal { gap: 8px; }
   #m-opening { gap: 16px; }
 }
+.mv-why { color: var(--gold1); line-height: 1.45; }
+.mv-why b { color: var(--rc); }
+#m-odds details { flex-basis: 100%; color: var(--grey1); }
+#m-odds summary { cursor: pointer; color: var(--gold2); font-weight: 600; }
+#m-odds ul { margin: 8px 0 2px; padding-left: 18px; line-height: 1.55; }
+#m-odds li b { color: var(--gold1); }

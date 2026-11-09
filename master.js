@@ -7,15 +7,19 @@ const Master = (() => {
   const PACK_SIZE = 5;
   const EVERY = 5 * 60e3, PER = 2;              // 2 packs toutes les 5 minutes
   const CAP = 20, START = 4;                    // packs gardés au maximum, packs offerts au départ
-  const PITY_EPIC = 8, PITY_LEG = 35;           // au pire : une Épique tous les 8 packs, une Légendaire tous les 35
+  const PITY_LEG = 40;                          // au pire, une Légendaire (ou mieux) tous les 40 packs
   const TYPES = { champ: "Champion", spell: "Sort", item: "Objet", rune: "Rune" };
   const TYPES_PL = { champ: "Champions", spell: "Sorts", item: "Objets", rune: "Runes" };
-  const PACKS = {
-    mix: { name: "Mixte", w: { champ: 25, spell: 45, item: 18, rune: 12 } },
-    champ: { name: "Champions", w: { champ: 1 } },
-    spell: { name: "Sorts", w: { spell: 1 } },
-    item: { name: "Objets", w: { item: 1 } },
-    rune: { name: "Runes", w: { rune: 1 } },
+  const MIX = { champ: 25, spell: 45, item: 18, rune: 12 }; // part de chaque type dans un pack
+  // Pourquoi une carte a sa rareté (affiché sur la carte en grand)
+  const WHY = {
+    champ: ["Peu présent dans la méta actuelle", "Joué régulièrement en classé ou en pro", "Souvent joué en pro et en classé",
+      "Très présent en compétition et en émeraude+", "Parmi les champions les plus joués et les plus célèbres"],
+    spell: ["Sort de base", "Ultime", "Sort marquant, qui change un combat", "Sort emblématique de LoL", "Parmi les sorts les plus forts et célèbres du jeu"],
+    item: ["Composant ou objet peu acheté", "Objet légendaire plus situationnel", "Objet très acheté dans son rôle",
+      "Objet central, acheté dans la plupart des parties de son rôle", "Parmi les objets les plus achetés du jeu"],
+    rune: ["Rune secondaire peu prise", "Rune secondaire courante, ou rune principale plus rare", "Rune très prise",
+      "Rune principale parmi les plus jouées", "La rune principale la plus jouée du jeu"],
   };
   const PAGE = 60;
   const pct = (x) => `${x.toLocaleString("fr-FR")} %`;
@@ -23,7 +27,7 @@ const Master = (() => {
   const fresh = () => ({ packs: START, t: Date.now(), inv: {}, at: {}, pity: { e: 0, l: 0 }, opened: 0 });
   let s = Object.assign(fresh(), store.get("flc_master", {}));
   let pool = null, byId = {}, byTypeRar = {};
-  const ui = { type: [], rar: [], own: "all", q: "", sort: "rarity", shown: PAGE, pack: "mix" };
+  const ui = { type: [], rar: [], own: "all", q: "", sort: "rarity", shown: PAGE };
   Object.assign(ui, store.get("flc_master_ui", {}), { shown: PAGE, q: "" });
   let opening = null, timer = null;
 
@@ -42,10 +46,8 @@ const Master = (() => {
     const L = lists();
     const get = (type, id) => (L[type] || {})[id];
     pool = [];
-    const champTier = {};
     for (const c of cards.champAll) {
       const t = get("champ", c.champId) ?? 0;
-      champTier[c.champId] = t;
       const raw = champRaw[c.champId];
       pool.push({
         id: `c_${c.champId}`, type: "champ", r: t, name: c.champ, sub: raw && raw.title ? raw.title : "",
@@ -55,9 +57,7 @@ const Master = (() => {
       });
     }
     for (const c of cards.champ) {
-      const t = champTier[c.champId] || 0;
-      // par défaut : la rareté du champion, un cran plus bas pour les ultimes, deux pour le reste
-      const def = c.key === "R" ? Math.min(2, Math.max(1, t - 1)) : Math.max(0, t - 2);
+      const def = c.key === "R" ? 1 : 0; // par défaut : ultime Rare, autres sorts Communs
       pool.push({
         id: `s_${c.champId}_${c.key}`, type: "spell", r: get("spell", `${c.champId}_${c.key}`) ?? def,
         name: c.name, sub: `${c.champ} · ${c.key === "P" ? "Passif" : AZERTY[c.key]}`, key: c.key,
@@ -66,9 +66,19 @@ const Master = (() => {
     }
     for (const c of cards.item) {
       const num = c.id.slice(5);
-      const def = c.itype === "legendary" ? 1 : 0;
+      // composants Communs, objets légendaires et bottes Rares, bottes T3 Épiques
+      // (Légendaires si ce sont les T3 de bottes très achetées)
+      let r = get("item", num), why = null;
+      if (c.btier === 3) {
+        r = r ?? (get("item", c.bfrom) >= 2 ? 3 : 2);
+        why = r >= 3 ? "Bottes améliorées (T3) des bottes les plus achetées" : "Bottes améliorées (T3)";
+      } else if (c.btier === 2) {
+        why = (r ?? 1) >= 2 ? "Bottes achetées dans une grande partie des parties" : "Bottes plus situationnelles";
+        r = r ?? 1;
+      } else r = r ?? (c.itype === "legendary" ? 1 : 0);
       pool.push({
-        id: `i_${num}`, type: "item", r: get("item", num) ?? def, name: c.name, sub: `${ITYPES[c.itype].replace(/s$/, "")} · ${c.gold} PO`,
+        id: `i_${num}`, type: "item", r, why, name: c.name,
+        sub: `${c.btier === 3 ? "Bottes T3" : c.btier === 2 ? "Bottes" : ITYPES[c.itype].replace(/s$/, "")} · ${c.gold} PO`,
         icon: c.icon, desc: custom[c.id] || c.short, official: c.official, stats: c.stats,
       });
     }
@@ -81,6 +91,7 @@ const Master = (() => {
         icon: c.icon, desc: custom[c.id] || c.short, official: c.official,
       });
     }
+    for (const c of pool) c.why ||= WHY[c.type][c.r];
     byId = Object.fromEntries(pool.map((c) => [c.id, c]));
     for (const c of pool) ((byTypeRar[c.type] ||= {})[c.r] ||= []).push(c);
   }
@@ -121,17 +132,14 @@ const Master = (() => {
     return null;
   }
 
-  function makePack(kind) {
-    const w = PACKS[kind].w;
+  function makePack() {
+    const w = MIX;
     const rs = [];
-    for (let i = 0; i < PACK_SIZE; i++) rs.push(rollRarity(i === PACK_SIZE - 1 ? 1 : 0)); // la dernière est au moins Rare
-    const best = Math.max(...rs);
-    if (best < 3 && s.pity.l + 1 >= PITY_LEG) rs[PACK_SIZE - 1] = rollRarity(3);
-    else if (best < 2 && s.pity.e + 1 >= PITY_EPIC) rs[PACK_SIZE - 1] = rollRarity(2);
+    for (let i = 0; i < PACK_SIZE; i++) rs.push(rollRarity(0)); // chaque carte est tirée indépendamment
+    if (Math.max(...rs) < 3 && s.pity.l + 1 >= PITY_LEG) rs[PACK_SIZE - 1] = rollRarity(3);
     const taken = new Set();
     const out = rs.map((r) => { const c = pickCard(pickWeighted(w), r, taken); if (c) taken.add(c.id); return c; }).filter(Boolean);
     const top = Math.max(...out.map((c) => c.r));
-    s.pity.e = top >= 2 ? 0 : s.pity.e + 1;
     s.pity.l = top >= 3 ? 0 : s.pity.l + 1;
     return out;
   }
@@ -142,7 +150,7 @@ const Master = (() => {
     s.packs--;
     if (s.packs === CAP - 1) s.t = Date.now(); // le compteur repart quand on passe sous le maximum
     s.opened++;
-    const got = makePack(ui.pack);
+    const got = makePack();
     const now = Math.floor(Date.now() / 60e3);
     const res = got.map((c) => {
       const before = s.inv[c.id] || 0;
@@ -210,25 +218,24 @@ const Master = (() => {
         } else ui[key] = val;
         ui.shown = PAGE;
         saveUi();
-        if (key === "pack") renderPacks(); else { renderFilters(); renderGrid(); }
+        renderFilters(); renderGrid();
       };
       el.appendChild(b);
     }
   }
-  const saveUi = () => store.set("flc_master_ui", { type: ui.type, rar: ui.rar, own: ui.own, sort: ui.sort, pack: ui.pack });
+  const saveUi = () => store.set("flc_master_ui", { type: ui.type, rar: ui.rar, own: ui.own, sort: ui.sort });
 
   function renderPacks() {
     tick();
     $("m-count").textContent = s.packs;
     $("m-open").disabled = s.packs <= 0;
-    $("m-open").textContent = s.packs > 0 ? `Ouvrir un pack ${PACKS[ui.pack].name.toLowerCase()}` : "Plus de pack";
+    $("m-open").textContent = s.packs > 0 ? "Ouvrir un pack" : "Plus de pack";
     if (s.packs >= CAP) $("m-timer").textContent = `Maximum atteint (${CAP} packs) : ouvre-en pour en regagner`;
     else {
       const left = Math.max(0, s.t + EVERY - Date.now());
       const m = Math.floor(left / 60e3), sec = Math.floor((left % 60e3) / 1000);
       $("m-timer").textContent = `+${PER} packs dans ${m}:${String(sec).padStart(2, "0")}`;
     }
-    chipRow($("m-packtype"), Object.fromEntries(Object.entries(PACKS).map(([k, p]) => [k, p.name])), "pack");
     $("m-guest").classList.toggle("hidden", !isGuest());
   }
 
@@ -361,7 +368,8 @@ const Master = (() => {
     $("m-view-box").innerHTML = `${cardHtml(c, { n, big: true })}
       <div class="mv-info">
         <div class="mv-own">${n ? `Possédée${n > 1 ? ` en ${n} exemplaires` : ""}` : "Pas encore trouvée"}</div>
-        <div class="mv-chance">Rareté ${RAR_FR[RAR[c.r]]} : ${pct(ODDS[c.r])} par carte d'un pack</div>
+        <div class="mv-why"><b class="r-${RAR[c.r]}">${RAR_FR[RAR[c.r]]}</b> : ${esc(c.why)}</div>
+        <div class="mv-chance">${pct(ODDS[c.r])} de chances par carte d'un pack</div>
         ${extra}
       </div>`;
     $("m-view").classList.remove("hidden");
@@ -379,7 +387,13 @@ const Master = (() => {
     $("m-grid").onclick = (e) => { const el = e.target.closest(".mc"); if (el) view(el.dataset.id); };
     $("m-view").onclick = (e) => { if (!e.target.closest("details")) $("m-view").classList.add("hidden"); };
     $("m-odds").innerHTML = RAR.map((r, i) => `<span class="r-${r}">${RAR_FR[r]} ${pct(ODDS[i])}</span>`).join("")
-      + `<em>5 cartes par pack, la dernière au moins Rare. Une Épique garantie au moins tous les ${PITY_EPIC} packs, une Légendaire tous les ${PITY_LEG}.</em>`;
+      + `<em>Chances pour chaque carte d'un pack (5 cartes). Si tu n'as eu aucune Légendaire en ${PITY_LEG} packs, la suivante est garantie.</em>`
+      + `<details><summary>Comment sont choisies les raretés ?</summary><ul>
+        <li><b>Champions</b> : selon leur présence en compétition et en classé émeraude et plus. Les plus joués sont Mythiques, ceux hors méta Communs.</li>
+        <li><b>Sorts</b> : un sort de base est Commun, un ultime Rare. Les sorts qui changent un combat montent en Épique, les plus emblématiques en Légendaire ou Mythique.</li>
+        <li><b>Objets</b> : composants Communs, objets légendaires Rares, puis Épique, Légendaire ou Mythique plus ils sont achetés. Bottes Rares (Épiques si très achetées), bottes T3 Épiques (Légendaires pour les T3 des bottes les plus achetées).</li>
+        <li><b>Runes</b> : selon leur taux de choix. Conquérant, la plus jouée, est Mythique.</li>
+        <li>Touche une carte de ta collection pour voir pourquoi elle a sa rareté.</li></ul></details>`;
     document.addEventListener("keydown", (e) => {
       if (prefs.mode !== "master" || e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
       if (e.key === "Escape") {
