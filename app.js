@@ -273,7 +273,8 @@ function buildFilters() {
 
 function saveAndRebuild() { store.set("flc_prefs", prefs); rebuild(); }
 
-function rebuild() {
+// keep : quand seul le compte change (connexion, chargement de la progression), on garde la carte affichée
+function rebuild(keep) {
   ahead = false;
   if (prefs.mode === "master") { // page LoL Master : packs et collection
     document.body.className = `mode-master${isGuest() ? " guest" : ""}`;
@@ -308,6 +309,7 @@ function rebuild() {
     : `${deck.length} cartes (${champs} champions)`;
   updateStats();
   if ($("dl-btn")) updateDlButton();
+  if (keep && current && !studyMode() && !$("card").classList.contains("flipped") && deck.some((c) => c.id === current.id)) return;
   next();
 }
 
@@ -1113,17 +1115,20 @@ async function onAccountChange(mode) {
     store.set("flc_owner", uid);
     lastMode = mode;
     renderAccount();
-    if (cards.champ.length) rebuild();
+    if (cards.champ.length) rebuild(true);
     let cloud = null, failed = false;
     try { cloud = await Account.load(); } catch { failed = true; }
     if (Account.mode !== "user" || Account.user.uid !== uid) return; // changé entre-temps
     const unsynced = store.get("flc_unsynced", false) && owner === uid;
     const hasCloud = cloud && (cloud.progress || cloud.custom || cloud.master);
-    // collection LoL Master : on garde celle qui a ouvert le plus de packs
-    let master = hasCloud ? Master.pick(l.master, cloud.master) : l.master;
+    // collection LoL Master : on garde celle qui a ouvert le plus de packs.
+    // shown = collection affichée, avec les packs ouverts pendant le chargement du compte (sinon ils seraient perdus)
+    const shown = Master.state;
+    const mine = l.master || !fromGuest ? shown : null;
+    let master = hasCloud ? Master.pick(mine, cloud.master) : mine;
     if (!failed && fromGuest) {
       const cur = Master.pick(master, null);
-      if (!cur || !(cur.opened > 0)) { master = fromGuest; store.set("flc_master", master); } // compte neuf : on lui donne la collection invité
+      if (!cur || !(cur.opened > 0)) { master = shown; store.set("flc_master", master); } // compte neuf : on lui donne la collection invité
       localStorage.removeItem("flc_master_guest");
       guestCarry = null;
     }
@@ -1150,7 +1155,7 @@ async function onAccountChange(mode) {
   }
   lastMode = mode;
   renderAccount();
-  if (cards.champ.length) rebuild();
+  if (cards.champ.length) rebuild(true);
   if (mode === "user") Master.publish(); // profil visible par les autres joueurs
 }
 document.addEventListener("click", () => { const m = document.getElementById("acc-menu"); if (m) m.classList.add("hidden"); });
@@ -1171,10 +1176,21 @@ load()
     $("dl-btn").onclick = downloadSection;
     updateDlButton();
     if (location.protocol.startsWith("http") && "serviceWorker" in navigator) {
-      // une nouvelle version du site vient de s'installer : on recharge une fois pour l'afficher tout de suite
+      // une nouvelle version du site vient de s'installer : on recharge tout de suite si la personne n'a encore rien fait,
+      // sinon on propose de recharger (un rechargement en pleine ouverture de pack la faisait disparaître)
       const hadSw = !!navigator.serviceWorker.controller;
-      let reloaded = false;
-      navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadSw && !reloaded) { reloaded = true; location.reload(); } });
+      let touched = false, reloaded = false;
+      for (const ev of ["pointerdown", "keydown"]) addEventListener(ev, () => (touched = true), { capture: true, once: true });
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (!hadSw || reloaded) return;
+        if (!touched) { reloaded = true; return location.reload(); }
+        if ($("sw-update")) return;
+        const bar = document.createElement("button");
+        bar.id = "sw-update";
+        bar.textContent = "Nouvelle version du site : clique pour recharger";
+        bar.onclick = () => location.reload();
+        document.body.appendChild(bar);
+      });
       navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((r) => r.update()).catch(() => {});
     }
   })
