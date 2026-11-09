@@ -122,6 +122,7 @@
 </main>
 
 <section id="master">
+  <div id="m-tabs"><button data-t="cards">Packs et collection</button><button data-t="team">Équipe</button></div>
   <div class="m-top">
     <div class="m-packs">
       <div class="m-pack-art"><div class="m-pack-logo">LoL<br>Master</div><b id="m-count">0</b></div>
@@ -134,6 +135,21 @@
     </div>
     <div id="m-progress"></div>
   </div>
+  <div id="m-team" class="hidden">
+    <div class="m-team-head">
+      <h2>Ton équipe <em id="m-team-total"></em></h2>
+      <details><summary>Comment ça marche ?</summary><ul>
+        <li>Choisis un champion que tu possèdes pour chaque poste. Touche son image pour le changer.</li>
+        <li><b>Niveau</b> (1 à 18) : +2 par double du champion, +1 par carte de chacun de ses sorts. Le niveau monte ses stats.</li>
+        <li><b>Sorts</b> : chaque carte d'un sort monte son rang (A, Z, E jusqu'à 5, R jusqu'à 3) et baisse son délai de récupération.</li>
+        <li><b>Objets et runes</b> : un exemplaire ne peut équiper qu'un seul perso. Avec 2 exemplaires d'un objet, tu peux le mettre sur 2 persos.</li>
+        <li><b>Quêtes de rôle</b> : Top jusqu'au niveau 20, Jungle plus rapide, bottes T3 seulement pour le Mid, 7e emplacement de bottes pour l'ADC, soins et boucliers renforcés pour le Support.</li>
+        <li>Les stats sont calculées avec les données officielles de Riot (niveau + objets).</li>
+      </ul></details>
+    </div>
+    <div id="m-team-grid"></div>
+  </div>
+  <div id="m-cards">
   <div id="m-odds"></div>
   <div class="m-filters">
     <h2>Collection <em id="m-found"></em></h2>
@@ -151,7 +167,16 @@
   </div>
   <div id="m-grid"></div>
   <button id="m-more" class="btn good hidden"></button>
+  </div>
 </section>
+
+<div id="m-pick" class="hidden">
+  <div class="m-pick-box">
+    <div class="m-pick-head"><b id="m-pick-title"></b><button id="m-pick-close" class="link">✕</button></div>
+    <input id="m-pick-search" type="search" placeholder="Chercher…">
+    <div id="m-pick-list"></div>
+  </div>
+</div>
 
 <div id="m-opening" class="hidden">
   <div id="m-summary"></div>

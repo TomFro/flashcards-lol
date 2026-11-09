@@ -1,5 +1,5 @@
 // Service worker : garde le site et les données téléchargées pour jouer hors ligne.
-const SHELL = "flc-shell-v4";
+const SHELL = "flc-shell-v5";
 const DATA = "flc-data";
 const SHELL_FILES = ["./", "index.html", "style.css", "app.js", "descriptions.js", "runes-desc.js", "items-desc.js", "matchups.js", "master.js", "master-rarity.js", "favicon.svg", "favicon-32.png", "apple-touch-icon.png", "account.js", "firebase-config.js"];
 

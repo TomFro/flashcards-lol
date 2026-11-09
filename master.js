@@ -10,7 +10,8 @@ const Master = (() => {
   const PITY_LEG = 40;                          // au pire, une Légendaire (ou mieux) tous les 40 packs
   const TYPES = { champ: "Champion", spell: "Sort", item: "Objet", rune: "Rune" };
   const TYPES_PL = { champ: "Champions", spell: "Sorts", item: "Objets", rune: "Runes" };
-  const MIX = { champ: 25, spell: 45, item: 18, rune: 12 }; // part de chaque type dans un pack
+  // part de chaque type dans un pack : peu d'objets et de runes, car chaque exemplaire ne sert qu'à un perso
+  const MIX = { champ: 30, spell: 52, item: 11, rune: 7 };
   // Pourquoi une carte a sa rareté (affiché sur la carte en grand)
   const WHY = {
     champ: ["Peu présent dans la méta actuelle", "Joué régulièrement en classé ou en pro", "Souvent joué en pro et en classé",
@@ -24,10 +25,10 @@ const Master = (() => {
   const PAGE = 60;
   const pct = (x) => `${x.toLocaleString("fr-FR")} %`;
 
-  const fresh = () => ({ packs: START, t: Date.now(), inv: {}, at: {}, pity: { e: 0, l: 0 }, opened: 0 });
+  const fresh = () => ({ packs: START, t: Date.now(), inv: {}, at: {}, pity: { e: 0, l: 0 }, opened: 0, team: {} });
   let s = Object.assign(fresh(), store.get("flc_master", {}));
   let pool = null, byId = {}, byTypeRar = {};
-  const ui = { type: [], rar: [], own: "all", q: "", sort: "rarity", shown: PAGE };
+  const ui = { type: [], rar: [], own: "all", q: "", sort: "rarity", shown: PAGE, tab: "cards" };
   Object.assign(ui, store.get("flc_master_ui", {}), { shown: PAGE, q: "" });
   let opening = null, timer = null;
 
@@ -61,7 +62,7 @@ const Master = (() => {
       pool.push({
         id: `s_${c.champId}_${c.key}`, type: "spell", r: get("spell", `${c.champId}_${c.key}`) ?? def,
         name: c.name, sub: `${c.champ} · ${c.key === "P" ? "Passif" : AZERTY[c.key]}`, key: c.key,
-        art: c.img, icon: c.icon, champ: c.champ, champId: c.champId, desc: custom[c.id] || c.short, official: c.official,
+        art: c.img, icon: c.icon, champ: c.champ, champId: c.champId, desc: custom[c.id] || c.short, official: c.official, cd: c.cd,
       });
     }
     for (const c of cards.item) {
@@ -78,8 +79,8 @@ const Master = (() => {
       } else r = r ?? (c.itype === "legendary" ? 1 : 0);
       pool.push({
         id: `i_${num}`, type: "item", r, why, name: c.name,
-        sub: `${c.btier === 3 ? "Bottes T3" : c.btier === 2 ? "Bottes" : ITYPES[c.itype].replace(/s$/, "")} · ${c.gold} PO`,
-        icon: c.icon, desc: custom[c.id] || c.short, official: c.official, stats: c.stats,
+        sub: `${c.btier === 3 ? "Bottes T3" : c.btier === 2 ? "Bottes" : c.itype === "legendary" ? "Objet complet" : "Composant"} · ${c.gold} PO`,
+        icon: c.icon, desc: custom[c.id] || c.short, official: c.official, stats: c.stats, btier: c.btier, num,
       });
     }
     for (const c of cards.rune) {
@@ -88,7 +89,7 @@ const Master = (() => {
       pool.push({
         id: `r_${key}`, type: "rune", r: get("rune", key) ?? def, name: c.name,
         sub: `${c.tree} · ${c.slot === "keystone" ? "Principale" : "Secondaire"}`,
-        icon: c.icon, desc: custom[c.id] || c.short, official: c.official,
+        icon: c.icon, desc: custom[c.id] || c.short, official: c.official, slot: c.slot,
       });
     }
     for (const c of pool) c.why ||= WHY[c.type][c.r];
@@ -174,6 +175,7 @@ const Master = (() => {
   function setState(n) {
     s = Object.assign(fresh(), n || {});
     s.pity = Object.assign({ e: 0, l: 0 }, s.pity);
+    s.team = s.team || {};
     if (prefs.mode === "master") render();
   }
   // garde la collection la plus avancée (celle qui a ouvert le plus de packs)
@@ -223,7 +225,7 @@ const Master = (() => {
       el.appendChild(b);
     }
   }
-  const saveUi = () => store.set("flc_master_ui", { type: ui.type, rar: ui.rar, own: ui.own, sort: ui.sort });
+  const saveUi = () => store.set("flc_master_ui", { type: ui.type, rar: ui.rar, own: ui.own, sort: ui.sort, tab: ui.tab });
 
   function renderPacks() {
     tick();
@@ -298,10 +300,13 @@ const Master = (() => {
     build();
     if (!pool) return;
     tick();
+    document.querySelectorAll("#m-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.t === ui.tab));
+    $("m-cards").classList.toggle("hidden", ui.tab !== "cards");
+    $("m-team").classList.toggle("hidden", ui.tab !== "team");
     renderPacks();
     renderProgress();
-    renderFilters();
-    renderGrid();
+    if (ui.tab === "team") renderTeam();
+    else { renderFilters(); renderGrid(); }
     clearInterval(timer);
     timer = setInterval(() => {
       if (prefs.mode !== "master") return clearInterval(timer);
@@ -351,6 +356,231 @@ const Master = (() => {
     render();
   }
 
+
+  // ---------- Équipe ----------
+  // Un champion possédé par poste. Son niveau vient de ses cartes, le rang de ses sorts de leurs doubles.
+  // Chaque exemplaire d'objet ou de rune ne peut équiper qu'un seul perso.
+  const ROLES = {
+    top: { name: "Top", quest: "Quête du Top : peut monter jusqu'au niveau 20" },
+    jungle: { name: "Jungle", quest: "Quête de la Jungle : familier évolué, +10 % de vitesse de déplacement" },
+    mid: { name: "Mid", quest: "Quête du Mid : seul poste qui peut porter des bottes T3" },
+    adc: { name: "ADC", quest: "Quête de l'ADC : un 7e emplacement réservé aux bottes" },
+    support: { name: "Support", quest: "Quête du Support : +10 % de puissance des soins et boucliers" },
+  };
+  const RUNE_SLOTS = ["keystone", "minor", "minor", "minor"];
+  const MAX_RANK = { P: 1, Q: 5, W: 5, E: 5, R: 3 };
+  const roleIcon = (r) => LANES[r].replace(/<\/svg>[\s\S]*$/, "</svg>");
+
+  const slot = (role) => (s.team[role] ||= { c: null, it: [], ru: [] });
+  const itemSlots = (role) => (role === "adc" ? 7 : 6);
+  const spellRank = (champId, key) => Math.min(MAX_RANK[key], 1 + (s.inv[`s_${champId}_${key}`] || 0));
+  // niveau : 1, +2 par double du champion, +1 par carte de ses sorts (passif compris)
+  function champLevel(champId, role) {
+    const copies = s.inv[`c_${champId}`] || 0;
+    let pts = 2 * Math.max(0, copies - 1);
+    for (const k of "PQWER") pts += s.inv[`s_${champId}_${k}`] || 0;
+    const cap = role === "top" ? 20 : 18;
+    return { lvl: Math.min(cap, 1 + pts), cap };
+  }
+  // combien d'exemplaires d'une carte sont déjà utilisés dans l'équipe (sauf à un endroit donné)
+  function used(id, except) {
+    let n = 0;
+    for (const [role, t] of Object.entries(s.team)) {
+      (t.it || []).forEach((x, i) => { if (x && `i_${x}` === id && !(except && except.role === role && except.kind === "it" && except.i === i)) n++; });
+      (t.ru || []).forEach((x, i) => { if (x && `r_${x}` === id && !(except && except.role === role && except.kind === "ru" && except.i === i)) n++; });
+    }
+    return n;
+  }
+
+  // ---- stats : données de Riot du champion au niveau voulu + stats des objets ----
+  const STAT_KEYS = [
+    [/d[ée]g[âa]ts d'attaque/, "ad"], [/^puissance( magique)?$/, "ap"], [/^points de vie$|^pv$/, "hp"], [/^mana$/, "mana"],
+    [/^armure$/, "armor"], [/r[ée]sistance magique/, "mr"], [/vitesse d'attaque/, "as"], [/coup critique/, "crit"],
+    [/vitesse de d[ée]placement/, "ms"], [/acc[ée]l[ée]ration de comp[ée]tence/, "ah"], [/l[ée]talit[ée]/, "leth"],
+    [/p[ée]n[ée]tration magique/, "mpen"], [/p[ée]n[ée]tration d'armure/, "apen"], [/vol de vie/, "ls"], [/omnivamp/, "omni"],
+  ];
+  function itemStats(ids) {
+    const sum = {}, extra = {};
+    for (const num of ids) {
+      const c = byId[`i_${num}`];
+      for (const line of (c && c.stats) || []) {
+        const m = /^([+-]?[\d\s.,]+)\s*(%?)\s*(.+)$/.exec(line.trim());
+        if (!m) continue;
+        const v = parseFloat(m[1].replace(/\s/g, "").replace(",", "."));
+        const label = m[3].trim();
+        const hit = STAT_KEYS.find(([re]) => re.test(label.toLowerCase()));
+        const key = hit ? hit[1] + (m[2] ? "%" : "") : `${m[2]}|${label}`;
+        (hit ? sum : extra)[key] = ((hit ? sum : extra)[key] || 0) + v;
+      }
+    }
+    return { sum, extra };
+  }
+  function statsHtml(role) {
+    const t = slot(role), raw = champRaw[t.c];
+    const st = raw && raw.stats;
+    if (!st) return "";
+    const { lvl } = champLevel(t.c, role);
+    const g = (base, per) => base + per * (lvl - 1) * (0.7025 + 0.0175 * (lvl - 1)); // formule de croissance de Riot
+    const { sum, extra } = itemStats(t.it.filter(Boolean));
+    const n = (k) => sum[k] || 0;
+    const r0 = (x) => Math.round(x);
+    const as = Math.min(2.5, st.attackspeed * (1 + (n("as%") + g(0, st.attackspeedperlevel)) / 100));
+    let ms = (st.movespeed + n("ms")) * (1 + n("ms%") / 100);
+    if (role === "jungle") ms *= 1.1;
+    const resource = raw.partype === "Mana" ? "Mana" : raw.partype;
+    const rows = [
+      ["Points de vie", r0(g(st.hp, st.hpperlevel) + n("hp"))],
+      st.mp > 0 && [resource || "Ressource", r0(g(st.mp, st.mpperlevel) + (raw.partype === "Mana" ? n("mana") : 0))],
+      ["Dégâts d'attaque", r0(g(st.attackdamage, st.attackdamageperlevel) + n("ad"))],
+      n("ap") && ["Puissance", r0(n("ap"))],
+      ["Armure", r0(g(st.armor, st.armorperlevel) + n("armor"))],
+      ["Résistance magique", r0(g(st.spellblock, st.spellblockperlevel) + n("mr"))],
+      ["Vitesse d'attaque", as.toFixed(2).replace(".", ",")],
+      n("crit%") && ["Coup critique", `${r0(n("crit%"))} %`],
+      ["Vitesse de déplacement", r0(ms)],
+      ["Portée", r0(st.attackrange)],
+      n("ah") && ["Accélération de compétence", r0(n("ah"))],
+      n("leth") && ["Létalité", r0(n("leth"))],
+      n("apen%") && ["Pénétration d'armure", `${r0(n("apen%"))} %`],
+      (n("mpen") || n("mpen%")) && ["Pénétration magique", [n("mpen") && r0(n("mpen")), n("mpen%") && `${r0(n("mpen%"))} %`].filter(Boolean).join(" + ")],
+      n("ls%") && ["Vol de vie", `${r0(n("ls%"))} %`],
+      n("omni%") && ["Omnivampirisme", `${r0(n("omni%"))} %`],
+      role === "support" && ["Soins et boucliers", "+10 %"],
+      ...Object.entries(extra).map(([k, v]) => { const [p, label] = k.split("|"); return [label, `${r0(v)}${p ? " %" : ""}`]; }),
+    ].filter(Boolean);
+    return `<div class="tm-stats">${rows.map(([a, b]) => `<span>${esc(a)}</span><b>${b}</b>`).join("")}</div>`;
+  }
+
+  function renderTeam() {
+    let total = 0;
+    const html = Object.entries(ROLES).map(([role, R]) => {
+      const t = slot(role);
+      const head = `<div class="tm-rhead">${roleIcon(role)}<b>${R.name}</b></div><div class="tm-quest">${R.quest}</div>`;
+      if (!t.c || !s.inv[`c_${t.c}`]) {
+        t.c = null;
+        return `<div class="tm-role empty">${head}<button class="tm-pick btn good" data-role="${role}">+ Choisir un champion</button></div>`;
+      }
+      const c = byId[`c_${t.c}`];
+      const { lvl, cap } = champLevel(t.c, role);
+      total += lvl;
+      const spells = "PQWER".split("").map((k) => {
+        const sp = byId[`s_${t.c}_${k}`];
+        if (!sp) return "";
+        const rank = spellRank(t.c, k), max = MAX_RANK[k];
+        const cd = k !== "P" && sp.cd && sp.cd.length ? sp.cd[Math.min(rank, sp.cd.length) - 1] : "";
+        return `<div class="tm-spell${s.inv[sp.id] ? "" : " locked"}" title="${esc(sp.name)}${k === "P" ? "" : ` · rang ${rank}/${max}`}${cd ? ` · ${cd} s` : ""}">
+          <img src="${sp.icon}" alt=""><span class="tm-k">${k === "P" ? "P" : AZERTY[k]}</span>
+          ${k === "P" ? "" : `<i class="tm-pips">${"<u class=on></u>".repeat(rank)}${"<u></u>".repeat(max - rank)}</i>`}
+          ${cd ? `<em>${cd}s</em>` : ""}</div>`;
+      }).join("");
+      const nItems = itemSlots(role);
+      const items = Array.from({ length: nItems }, (_, i) => {
+        const num = t.it[i];
+        const it = num && byId[`i_${num}`];
+        return `<button class="tm-slot${it ? ` r-${RAR[it.r]}` : ""}${role === "adc" && i === 6 ? " boots" : ""}" data-role="${role}" data-kind="it" data-i="${i}" title="${it ? esc(it.name) : role === "adc" && i === 6 ? "Emplacement de bottes" : "Ajouter un objet"}">${it ? `<img src="${it.icon}" alt="">` : role === "adc" && i === 6 ? "👢" : "+"}</button>`;
+      }).join("");
+      const runes = RUNE_SLOTS.map((kind, i) => {
+        const key = t.ru[i];
+        const ru = key && byId[`r_${key}`];
+        return `<button class="tm-slot rune${i === 0 ? " ks" : ""}${ru ? ` r-${RAR[ru.r]}` : ""}" data-role="${role}" data-kind="ru" data-i="${i}" title="${ru ? esc(ru.name) : i === 0 ? "Rune principale" : "Rune secondaire"}">${ru ? `<img src="${ru.icon}" alt="">` : "+"}</button>`;
+      }).join("");
+      const next = lvl >= cap ? "Niveau max" : "Prochain niveau : 1 carte d'un de ses sorts, ou un double";
+      return `<div class="tm-role r-${RAR[c.r]}">${head}
+        <div class="tm-champ" data-role="${role}" title="Changer de champion"><img src="${c.art}" alt=""><div class="tm-lvl">${lvl}</div>
+          <div class="tm-cname"><b>${esc(c.name)}</b><span>Niveau ${lvl} / ${cap}</span></div></div>
+        <div class="tm-next">${next}</div>
+        <div class="tm-spells">${spells}</div>
+        <h4>Objets</h4><div class="tm-items">${items}</div>
+        <h4>Runes</h4><div class="tm-items">${runes}</div>
+        ${statsHtml(role)}
+      </div>`;
+    }).join("");
+    $("m-team-grid").innerHTML = html;
+    $("m-team-total").textContent = `Niveau total de l'équipe : ${total}`;
+    $("m-team-grid").querySelectorAll(".tm-pick, .tm-champ").forEach((el) => (el.onclick = () => pickChamp(el.dataset.role)));
+    $("m-team-grid").querySelectorAll(".tm-slot").forEach((el) => (el.onclick = () => pickGear(el.dataset.role, el.dataset.kind, +el.dataset.i)));
+  }
+
+  // ---- choix dans une liste ----
+  function openPicker(title, options, onPick, removable) {
+    $("m-pick-title").textContent = title;
+    $("m-pick-search").value = "";
+    const draw = () => {
+      const q = $("m-pick-search").value.trim().toLowerCase();
+      const list = options.filter((o) => !q || o.search.toLowerCase().includes(q));
+      $("m-pick-list").innerHTML = (removable ? `<button class="pk pk-remove" data-v="">✕ Retirer</button>` : "")
+        + (list.length ? list.map((o) => `<button class="pk r-${RAR[o.c.r]}${o.off ? " off" : ""}" data-v="${o.v}" ${o.off ? "disabled" : ""}>
+            <img src="${o.img}" alt=""><span><b>${esc(o.c.name)}</b><em>${esc(o.note)}</em></span></button>`).join("")
+          : `<div class="m-none">Aucune carte disponible. Ouvre des packs pour en trouver !</div>`);
+      $("m-pick-list").querySelectorAll(".pk:not(.off)").forEach((b) => (b.onclick = () => { closePicker(); onPick(b.dataset.v || null); }));
+    };
+    $("m-pick-search").oninput = draw;
+    draw();
+    $("m-pick").classList.remove("hidden");
+  }
+  const closePicker = () => $("m-pick").classList.add("hidden");
+
+  function pickChamp(role) {
+    const where = {};
+    for (const [r, t] of Object.entries(s.team)) if (t.c) where[t.c] = r;
+    const champs = pool.filter((c) => c.type === "champ" && s.inv[c.id]).map((c) => {
+      const fits = (c.lanes || []).includes(role);
+      const { lvl } = champLevel(c.champId, role);
+      const other = where[c.champId] && where[c.champId] !== role ? ` · déjà en ${ROLES[where[c.champId]].name} (échange)` : "";
+      return { c, v: c.champId, img: c.art, fits, lvl, search: c.name, note: `Niveau ${lvl}${fits ? "" : " · hors poste"}${other}` };
+    }).sort((a, b) => b.fits - a.fits || b.lvl - a.lvl || a.c.name.localeCompare(b.c.name));
+    openPicker(`Champion pour le poste ${ROLES[role].name}`, champs, (id) => {
+      if (!id) return;
+      const t = slot(role);
+      const from = where[id];
+      if (from && from !== role) { // échange de poste entre les deux champions
+        const f = slot(from);
+        [f.c, t.c] = [t.c, f.c];
+      } else if (t.c !== id) { t.c = id; }
+      save();
+      renderTeam();
+    }, false);
+  }
+
+  function pickGear(role, kind, i) {
+    const t = slot(role);
+    const cur = (kind === "it" ? t.it : t.ru)[i];
+    const except = { role, kind, i };
+    let options;
+    if (kind === "it") {
+      const bootsOnly = role === "adc" && i === 6;
+      const otherBoots = t.it.some((x, j) => j !== i && x && byId[`i_${x}`] && byId[`i_${x}`].btier);
+      options = pool.filter((c) => c.type === "item" && s.inv[c.id]).map((c) => {
+        const free = s.inv[c.id] - used(c.id, except);
+        let why = "";
+        if (free <= 0) why = "tous les exemplaires sont déjà équipés";
+        else if (t.it.some((x, j) => j !== i && `i_${x}` === c.id)) why = "déjà dans ce build";
+        else if (bootsOnly && !c.btier) why = "emplacement réservé aux bottes";
+        else if (role === "adc" && !bootsOnly && c.btier) why = "les bottes vont dans l'emplacement de bottes";
+        else if (c.btier && otherBoots) why = "une seule paire de bottes";
+        else if (c.btier === 3 && role !== "mid") why = "bottes T3 : seulement pour le Mid";
+        return { c, v: c.num, img: c.icon, off: !!why, search: c.name, note: why || `${free} exemplaire${free > 1 ? "s" : ""} libre${free > 1 ? "s" : ""} · ${c.sub}` };
+      });
+    } else {
+      const wantKey = i === 0;
+      options = pool.filter((c) => c.type === "rune" && s.inv[c.id] && (c.slot === "keystone") === wantKey).map((c) => {
+        const free = s.inv[c.id] - used(c.id, except);
+        const key = c.id.slice(2);
+        let why = "";
+        if (free <= 0) why = "tous les exemplaires sont déjà équipés";
+        else if (t.ru.some((x, j) => j !== i && x === key)) why = "déjà sur ce perso";
+        return { c, v: key, img: c.icon, off: !!why, search: c.name, note: why || `${free} exemplaire${free > 1 ? "s" : ""} libre${free > 1 ? "s" : ""} · ${c.sub}` };
+      });
+    }
+    options.sort((a, b) => a.off - b.off || b.c.r - a.c.r || a.c.name.localeCompare(b.c.name));
+    const title = kind === "it" ? `Objet pour ${byId[`c_${t.c}`].name}` : `${i === 0 ? "Rune principale" : "Rune secondaire"} pour ${byId[`c_${t.c}`].name}`;
+    openPicker(title, options, (v) => {
+      (kind === "it" ? t.it : t.ru)[i] = v;
+      save();
+      renderTeam();
+    }, !!cur);
+  }
+
   // ---------- Carte en grand ----------
   function view(id) {
     const c = byId[id];
@@ -377,6 +607,9 @@ const Master = (() => {
 
   function wireUi() {
     $("m-open").onclick = openPack;
+    document.querySelectorAll("#m-tabs button").forEach((b) => (b.onclick = () => { ui.tab = b.dataset.t; saveUi(); render(); }));
+    $("m-pick").onclick = (e) => { if (e.target.id === "m-pick" || e.target.id === "m-pick-close") closePicker(); };
+    $("m-pick-search").onkeydown = (e) => { if (e.key === "Escape") closePicker(); };
     $("m-all").onclick = revealAll;
     $("m-again").onclick = () => { if (s.packs > 0) openPack(); };
     $("m-close").onclick = closeOpening;
@@ -397,9 +630,10 @@ const Master = (() => {
     document.addEventListener("keydown", (e) => {
       if (prefs.mode !== "master" || e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
       if (e.key === "Escape") {
-        if (!$("m-view").classList.contains("hidden")) $("m-view").classList.add("hidden");
+        if (!$("m-pick").classList.contains("hidden")) closePicker();
+        else if (!$("m-view").classList.contains("hidden")) $("m-view").classList.add("hidden");
         else if (opening) closeOpening();
-      } else if (e.code === "Space" || e.code === "Enter") {
+      } else if ((e.code === "Space" || e.code === "Enter") && ui.tab === "cards" && $("m-pick").classList.contains("hidden")) {
         e.preventDefault();
         if (!$("m-view").classList.contains("hidden")) return $("m-view").classList.add("hidden");
         if (!opening) return openPack();
