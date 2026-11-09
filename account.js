@@ -81,6 +81,40 @@ window.Account = (() => {
     }
   }
 
+  // Connexion par e-mail et mot de passe
+  const EMAIL_ERRORS = {
+    "auth/invalid-email": "Adresse e-mail invalide.",
+    "auth/missing-password": "Entre un mot de passe.",
+    "auth/weak-password": "Mot de passe trop court (6 caractères minimum).",
+    "auth/email-already-in-use": "Un compte existe déjà avec cet e-mail. Connecte-toi plutôt.",
+    "auth/invalid-credential": "E-mail ou mot de passe incorrect.",
+    "auth/wrong-password": "E-mail ou mot de passe incorrect.",
+    "auth/user-not-found": "Aucun compte avec cet e-mail.",
+    "auth/too-many-requests": "Trop d'essais. Réessaie dans quelques minutes.",
+    "auth/network-request-failed": "Pas de connexion internet.",
+    "auth/operation-not-allowed": "La connexion par e-mail n'est pas activée sur Firebase.",
+  };
+  const emailError = (e) => new Error(EMAIL_ERRORS[e.code] || e.message || "Connexion impossible.");
+  async function signInEmail(email, password) {
+    if (!enabled || !window.firebase) throw new Error("Connexion indisponible pour le moment.");
+    try { await firebase.auth().signInWithEmailAndPassword(email.trim(), password); } catch (e) { throw emailError(e); }
+  }
+  async function signUpEmail(email, password, name) {
+    if (!enabled || !window.firebase) throw new Error("Connexion indisponible pour le moment.");
+    if (!name.trim()) throw new Error("Choisis un pseudo.");
+    try {
+      const cred = await firebase.auth().createUserWithEmailAndPassword(email.trim(), password);
+      await cred.user.updateProfile({ displayName: name.trim().slice(0, 30) });
+      user = cred.user;
+      try { localStorage.setItem(LAST, JSON.stringify({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL })); } catch {}
+      emit();
+    } catch (e) { throw emailError(e); }
+  }
+  async function resetPassword(email) {
+    if (!enabled || !window.firebase) throw new Error("Connexion indisponible pour le moment.");
+    try { await firebase.auth().sendPasswordResetEmail(email.trim()); } catch (e) { throw emailError(e); }
+  }
+
   function signOut() {
     try { localStorage.removeItem(LAST); } catch {}
     if (window.firebase) return firebase.auth().signOut();
@@ -111,10 +145,11 @@ window.Account = (() => {
   }
 
   return {
-    init, signIn, signOut, load, save,
+    init, signIn, signInEmail, signUpEmail, resetPassword, signOut, load, save,
     get mode() { return mode; },
     get user() { return user; },
     get restoring() { return restoring; },
+    get db() { return mode === "user" ? db : null; },
     onChange(fn) { listeners.push(fn); },
   };
 })();

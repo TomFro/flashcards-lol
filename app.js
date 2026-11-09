@@ -1000,10 +1000,12 @@ function renderAccount() {
       <div id="acc-menu" class="hidden">
         <button data-p="google"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3zM12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22zM6.4 14a6 6 0 0 1 0-3.9V7.5H3.1a10 10 0 0 0 0 9zM12 6c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.5L6.4 10C7.2 7.7 9.4 6 12 6z"/></svg>Google</button>
         <button data-p="github"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.3 4.7-4.6 5 .4.3.7.9.7 1.9V21c0 .3.2.6.7.5A10 10 0 0 0 12 2z"/></svg>GitHub</button>
+        <button data-p="email"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 5h18v14H3zm2 2v.5l7 4.5 7-4.5V7zm0 2.9V17h14V9.9l-7 4.5z"/></svg>E-mail</button>
       </div>`;
     $("acc-login").onclick = (e) => { e.stopPropagation(); $("acc-menu").classList.toggle("hidden"); };
     $("acc-menu").querySelectorAll("button").forEach((b) => (b.onclick = async () => {
       $("acc-menu").classList.add("hidden");
+      if (b.dataset.p === "email") return openEmailLogin();
       try { await Account.signIn(b.dataset.p); }
       catch (err) { $("banner").textContent = err.message || "Connexion impossible."; $("banner").classList.remove("hidden"); }
     }));
@@ -1017,6 +1019,60 @@ function renderAccount() {
               : `<button id="acc-logout" class="link">Déconnexion</button>`}</div>`;
   box.querySelector("span").textContent = u.displayName || u.email || "Connecté";
   if (!offline) $("acc-logout").onclick = () => Account.signOut();
+}
+
+// Fenêtre de connexion par e-mail : se connecter, créer un compte ou recevoir un lien de nouveau mot de passe
+function openEmailLogin() {
+  let box = $("email-login");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "email-login";
+    box.innerHTML = `<form class="el-box">
+        <div class="el-head"><b>Connexion par e-mail</b><button type="button" class="link el-x">✕</button></div>
+        <div class="el-tabs"><button type="button" data-m="in" class="on">Se connecter</button><button type="button" data-m="up">Créer un compte</button></div>
+        <label class="el-name">Pseudo (visible par les autres joueurs)<input name="name" maxlength="30" autocomplete="nickname"></label>
+        <label>E-mail<input name="email" type="email" autocomplete="email" required></label>
+        <label>Mot de passe<input name="pw" type="password" autocomplete="current-password" minlength="6" required></label>
+        <div class="el-msg"></div>
+        <button type="submit" class="btn good el-go">Se connecter</button>
+        <button type="button" class="link el-forgot">Mot de passe oublié ?</button>
+      </form>`;
+    document.body.appendChild(box);
+    const f = box.querySelector("form");
+    let m = "in";
+    const setM = (x) => {
+      m = x;
+      box.querySelectorAll(".el-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.m === m));
+      box.classList.toggle("up", m === "up");
+      f.pw.autocomplete = m === "up" ? "new-password" : "current-password";
+      box.querySelector(".el-go").textContent = m === "up" ? "Créer mon compte" : "Se connecter";
+      box.querySelector(".el-msg").textContent = "";
+    };
+    box.querySelectorAll(".el-tabs button").forEach((b) => (b.onclick = () => setM(b.dataset.m)));
+    const close = () => box.classList.add("hidden");
+    box.querySelector(".el-x").onclick = close;
+    box.onclick = (e) => { if (e.target === box) close(); };
+    const msg = (t, ok) => { const el = box.querySelector(".el-msg"); el.textContent = t; el.classList.toggle("ok", !!ok); };
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      const go = box.querySelector(".el-go");
+      go.disabled = true;
+      msg("");
+      try {
+        if (m === "up") await Account.signUpEmail(f.email.value, f.pw.value, f.name.value);
+        else await Account.signInEmail(f.email.value, f.pw.value);
+        close();
+      } catch (err) { msg(err.message); }
+      go.disabled = false;
+    };
+    box.querySelector(".el-forgot").onclick = async () => {
+      if (!f.email.value.trim()) return msg("Entre ton e-mail au-dessus, puis clique à nouveau.");
+      try { await Account.resetPassword(f.email.value); msg("C'est envoyé : regarde ta boîte mail pour choisir un nouveau mot de passe.", true); }
+      catch (err) { msg(err.message); }
+    };
+  }
+  box.classList.remove("hidden");
+  setTimeout(() => box.querySelector("input[name=email]").focus(), 50);
 }
 
 // flc_owner : compte à qui appartient la progression gardée dans ce navigateur
@@ -1079,6 +1135,7 @@ async function onAccountChange(mode) {
   lastMode = mode;
   renderAccount();
   if (cards.champ.length) rebuild();
+  if (mode === "user") Master.publish(); // profil visible par les autres joueurs
 }
 document.addEventListener("click", () => { const m = document.getElementById("acc-menu"); if (m) m.classList.add("hidden"); });
 

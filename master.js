@@ -7,6 +7,8 @@ const Master = (() => {
   const PACK_SIZE = 5;
   const EVERY = 5 * 60e3, PER = 2;              // 2 packs toutes les 5 minutes
   const CAP = 10, START = 4;                    // packs gardés au maximum, packs offerts au départ
+  const GOLD_START = 100, GOLD_PACK = 10;       // or au départ, or gagné par pack ouvert
+  const RECYCLE = [5, 15, 60, 250, 1000];       // or rendu en recyclant un double, selon la rareté
   const V = 2;                                  // changer ce numéro remet toutes les collections à zéro
   const PITY_LEG = 40;                          // au pire, une Légendaire (ou mieux) tous les 40 packs
   const TYPES = { champ: "Champion", spell: "Sort", item: "Objet", rune: "Rune" };
@@ -17,7 +19,7 @@ const Master = (() => {
   const PAGE = 60;
   const pct = (x) => `${x.toLocaleString("fr-FR")} %`;
 
-  const fresh = () => ({ v: V, packs: START, t: Date.now(), inv: {}, at: {}, pity: { e: 0, l: 0 }, opened: 0, team: {} });
+  const fresh = () => ({ v: V, gold: GOLD_START, packs: START, t: Date.now(), inv: {}, at: {}, pity: { e: 0, l: 0 }, opened: 0, team: {} });
   const valid = (x) => (x && x.v === V ? x : null); // une collection d'une ancienne version est ignorée
   let s = Object.assign(fresh(), valid(store.get("flc_master", null)) || {});
   s.packs = Math.min(s.packs, CAP);
@@ -159,6 +161,7 @@ const Master = (() => {
     s.packs--;
     if (s.packs === CAP - 1) s.t = Date.now(); // le compteur repart quand on passe sous le maximum
     s.opened++;
+    s.gold = (s.gold || 0) + GOLD_PACK;
     const got = makePack();
     const now = Math.floor(Date.now() / 60e3);
     const res = got.map((c) => {
@@ -178,7 +181,7 @@ const Master = (() => {
     if (isGuest()) return; // invité : la collection dure le temps de la visite
     store.set("flc_master", s);
     if (isOnlineUser()) store.set("flc_unsynced", true);
-    if (Account.mode === "user") persist();
+    if (Account.mode === "user") { persist(); publishSoon(); }
   }
   function setState(n) {
     const old = n && !valid(n);
@@ -312,11 +315,13 @@ const Master = (() => {
     if (!pool) return;
     tick();
     document.querySelectorAll("#m-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.t === ui.tab));
-    $("m-cards").classList.toggle("hidden", ui.tab !== "cards");
-    $("m-team").classList.toggle("hidden", ui.tab !== "team");
+    for (const t of ["cards", "team", "players", "market"]) $(`m-${t}`).classList.toggle("hidden", ui.tab !== t);
+    $("m-top").classList.toggle("hidden", ui.tab !== "cards" && ui.tab !== "team");
     renderPacks();
     renderProgress();
     if (ui.tab === "team") renderTeam();
+    else if (ui.tab === "players") renderPlayers();
+    else if (ui.tab === "market") renderMarket();
     else { renderFilters(); renderGrid(); }
     clearInterval(timer);
     timer = setInterval(() => {
@@ -386,10 +391,10 @@ const Master = (() => {
   const itemSlots = (role) => (role === "adc" ? 7 : 6);
   const spellRank = (champId, key) => Math.min(MAX_RANK[key], 1 + (s.inv[`s_${champId}_${key}`] || 0));
   // niveau : 1, +2 par double du champion, +1 par carte de ses sorts (passif compris)
-  function champLevel(champId, role) {
-    const copies = s.inv[`c_${champId}`] || 0;
+  function champLevel(champId, role, inv = s.inv) {
+    const copies = inv[`c_${champId}`] || 0;
     let pts = 2 * Math.max(0, copies - 1);
-    for (const k of "PQWER") pts += s.inv[`s_${champId}_${k}`] || 0;
+    for (const k of "PQWER") pts += inv[`s_${champId}_${k}`] || 0;
     const cap = role === "top" ? 20 : 18;
     return { lvl: Math.min(cap, 1 + pts), cap };
   }
@@ -592,6 +597,280 @@ const Master = (() => {
     }, !!cur);
   }
 
+
+  // ---------- Or, recyclage ----------
+  // exemplaires libres d'une carte : ni équipés dans l'équipe, ni le champion d'un poste
+  function free(id) {
+    let n = (s.inv[id] || 0) - used(id);
+    if (id.startsWith("c_") && Object.values(s.team).some((t) => t.c && `c_${t.c}` === id)) n--;
+    return Math.max(0, n);
+  }
+  function recycle(id, quiet) {
+    const c = byId[id];
+    if (!c || (s.inv[id] || 0) < 2 || free(id) < 1) return 0;
+    s.inv[id]--;
+    s.gold = (s.gold || 0) + RECYCLE[c.r];
+    if (!quiet) save();
+    return RECYCLE[c.r];
+  }
+  function recycleAll(maxR) {
+    let gold = 0, n = 0;
+    for (const c of pool) {
+      if (c.r > maxR) continue;
+      while ((s.inv[c.id] || 0) > 1 && free(c.id) > 0) { gold += recycle(c.id, true); n++; }
+    }
+    if (n) save();
+    return { gold, n };
+  }
+
+  // ---------- Profil public (pour les autres joueurs) ----------
+  let pubTimer = null;
+  function publishSoon() {
+    clearTimeout(pubTimer);
+    pubTimer = setTimeout(publish, 3000);
+  }
+  function publish() {
+    const db = Account.db, u = Account.user;
+    build();
+    if (!db || !u || !pool) return;
+    const byR = [0, 0, 0, 0, 0];
+    for (const c of pool) if (s.inv[c.id]) byR[c.r]++;
+    db.collection("profiles").doc(u.uid).set({
+      name: u.displayName || "Joueur", photo: u.photoURL || "", owned: byR.reduce((a, b) => a + b, 0), total: pool.length,
+      byR, opened: s.opened, inv: s.inv, team: s.team,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }).catch((e) => console.error("Profil public non enregistré", e));
+  }
+  const needOnline = (what) => `<div class="m-none">${isGuest() ? `Connecte-toi pour ${what}.` : `Il faut être connecté à internet pour ${what}.`}</div>`;
+
+  // ---------- Joueurs ----------
+  let players = null, viewing = null;
+  async function renderPlayers() {
+    const box = $("m-players");
+    if (!Account.db) { box.innerHTML = needOnline("voir les autres joueurs"); return; }
+    if (viewing) return renderProfile(viewing);
+    box.innerHTML = `<div class="m-panel"><h2>Joueurs</h2><div id="m-plist" class="m-plist"><div class="m-none">Chargement…</div></div></div>`;
+    try {
+      const snap = await Account.db.collection("profiles").orderBy("updatedAt", "desc").limit(50).get();
+      players = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+    } catch (e) { console.error(e); $("m-plist").innerHTML = `<div class="m-none">Impossible de charger les joueurs.</div>`; return; }
+    if (ui.tab !== "players" || viewing) return;
+    const me = Account.user && Account.user.uid;
+    $("m-plist").innerHTML = players.length ? players.map((p) => {
+      const lvl = Object.entries(p.team || {}).reduce((a, [role, t]) => a + (t.c && p.inv && p.inv[`c_${t.c}`] ? champLevel(t.c, role, p.inv).lvl : 0), 0);
+      return `<button class="m-player" data-uid="${esc(p.uid)}">
+        ${p.photo ? `<img src="${esc(p.photo)}" alt="" onerror="this.remove()">` : `<i class="m-avatar">${esc((p.name || "?")[0])}</i>`}
+        <span><b>${esc(p.name)}${p.uid === me ? " (toi)" : ""}</b><em>${p.owned || 0} / ${p.total || pool.length} cartes · ${(p.byR || [])[4] || 0} mythique${((p.byR || [])[4] || 0) > 1 ? "s" : ""} · équipe niveau ${lvl}</em></span>
+      </button>`;
+    }).join("") : `<div class="m-none">Personne pour l'instant.</div>`;
+    $("m-plist").querySelectorAll(".m-player").forEach((b) => (b.onclick = () => { viewing = players.find((p) => p.uid === b.dataset.uid); renderProfile(viewing); }));
+  }
+
+  function renderProfile(p) {
+    const box = $("m-players");
+    const inv = p.inv || {};
+    const owned = pool.filter((c) => inv[c.id]).sort((a, b) => b.r - a.r || a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
+    const bars = RAR.map((r, i) => i).reverse().map((i) => {
+      const all = pool.filter((c) => c.r === i).length, have = owned.filter((c) => c.r === i).length;
+      return `<div class="m-rbar r-${RAR[i]}"><span>${RAR_FR[RAR[i]]}</span><div class="bar"><i style="width:${all ? (100 * have) / all : 0}%"></i></div><em>${have}/${all}</em></div>`;
+    }).join("");
+    const team = Object.entries(ROLES).map(([role, R]) => {
+      const t = (p.team || {})[role];
+      const c = t && t.c && byId[`c_${t.c}`];
+      if (!c) return `<div class="pf-role empty"><div class="tm-rhead">${roleIcon(role)}<b>${R.name}</b></div><em>Vide</em></div>`;
+      const icons = [...(t.it || []).map((x) => x && byId[`i_${x}`]), ...(t.ru || []).map((x) => x && byId[`r_${x}`])].filter(Boolean);
+      return `<div class="pf-role r-${RAR[c.r]}"><div class="tm-rhead">${roleIcon(role)}<b>${R.name}</b></div>
+        <div class="pf-champ"><img src="${c.art}" alt=""><div class="tm-lvl">${champLevel(t.c, role, inv).lvl}</div><span>${esc(c.name)}</span></div>
+        <div class="pf-gear">${icons.map((x) => `<img class="r-${RAR[x.r]}" src="${x.icon}" title="${esc(x.name)}" alt="">`).join("")}</div></div>`;
+    }).join("");
+    box.innerHTML = `<div class="m-panel">
+        <button class="link pf-back">← Tous les joueurs</button>
+        <div class="pf-head">${p.photo ? `<img src="${esc(p.photo)}" alt="" onerror="this.remove()">` : `<i class="m-avatar">${esc((p.name || "?")[0])}</i>`}
+          <div><h2>${esc(p.name)}</h2><em>${owned.length} / ${pool.length} cartes · ${p.opened || 0} packs ouverts</em></div></div>
+        <div class="pf-bars">${bars}</div>
+      </div>
+      <div class="m-panel"><h2>Équipe</h2><div class="pf-team">${team}</div></div>
+      <div class="m-panel"><h2>Collection <em>${owned.length} cartes</em></h2><div class="m-grid pf-grid">${owned.slice(0, 120).map((c) => cardHtml(c, { n: inv[c.id] })).join("")}</div>
+        ${owned.length > 120 ? `<div class="m-none">… et ${owned.length - 120} autres cartes</div>` : ""}</div>`;
+    box.querySelector(".pf-back").onclick = () => { viewing = null; renderPlayers(); };
+    box.querySelectorAll(".pf-grid .mc").forEach((el) => (el.onclick = () => view(el.dataset.id)));
+  }
+
+  // ---------- Marché ----------
+  // Une carte mise en vente quitte ta collection ; l'acheteur paie en or, le vendeur récupère l'or à sa prochaine visite.
+  const mk = { q: "", rar: [], sort: "recent" };
+  let listings = [];
+  async function claimSales() {
+    const db = Account.db, u = Account.user;
+    if (!db || !u) return [];
+    const mine = (await db.collection("market").where("seller", "==", u.uid).get()).docs.map((d) => ({ id: d.id, ref: d.ref, ...d.data() }));
+    let gained = 0;
+    for (const l of mine.filter((x) => x.status === "sold" && !x.claimed)) {
+      try {
+        await db.runTransaction(async (tr) => {
+          const d = await tr.get(l.ref);
+          if (!d.exists || d.data().claimed || d.data().status !== "sold") throw new Error("déjà récupéré");
+          tr.update(l.ref, { claimed: true });
+        });
+        gained += l.price;
+        l.claimed = true;
+      } catch {}
+    }
+    if (gained) { s.gold = (s.gold || 0) + gained; save(); }
+    return mine;
+  }
+
+  async function renderMarket() {
+    const box = $("m-market");
+    if (!Account.db) { box.innerHTML = needOnline("utiliser le marché"); return; }
+    box.innerHTML = `<div class="m-panel mk-head">
+        <div><h2>Marché</h2><div class="mk-gold"><b id="mk-gold">${s.gold || 0}</b> or</div>
+          <em>Tu gagnes ${GOLD_PACK} or par pack ouvert, et en recyclant tes doubles (${RAR.map((r, i) => `${RAR_FR[r]} ${RECYCLE[i]}`).join(", ")}).</em></div>
+        <div class="mk-actions"><button id="mk-sell" class="btn good">Vendre une carte</button>
+          <button id="mk-recycle" class="btn">Recycler les doubles Communs et Rares</button></div>
+      </div>
+      <div class="m-panel"><h2>Mes ventes</h2><div id="mk-mine"><div class="m-none">Chargement…</div></div></div>
+      <div class="m-panel"><h2>En vente <em id="mk-count"></em></h2>
+        <div class="m-frow"><input id="mk-search" type="search" placeholder="Chercher une carte…" value="${esc(mk.q)}">
+          <select id="mk-sort"><option value="recent">Les plus récentes</option><option value="cheap">Prix croissant</option><option value="dear">Prix décroissant</option><option value="rarity">Rareté</option></select></div>
+        <div class="chips" id="mk-rar"></div>
+        <div id="mk-list" class="mk-list"><div class="m-none">Chargement…</div></div></div>`;
+    $("mk-sort").value = mk.sort;
+    $("mk-sell").onclick = sellPicker;
+    $("mk-recycle").onclick = () => {
+      const { gold, n } = recycleAll(1);
+      $("mk-recycle").textContent = n ? `${n} doubles recyclés : +${gold} or` : "Aucun double Commun ou Rare à recycler";
+      $("mk-gold").textContent = s.gold;
+    };
+    $("mk-search").oninput = (e) => { mk.q = e.target.value; drawListings(); };
+    $("mk-sort").onchange = (e) => { mk.sort = e.target.value; drawListings(); };
+    const rarBox = $("mk-rar");
+    RAR.forEach((r, i) => {
+      const b = document.createElement("button");
+      b.textContent = RAR_FR[r];
+      b.className = mk.rar.includes(i) ? "on" : "";
+      b.onclick = () => { const k = mk.rar.indexOf(i); k >= 0 ? mk.rar.splice(k, 1) : mk.rar.push(i); b.classList.toggle("on"); drawListings(); };
+      rarBox.appendChild(b);
+    });
+    try {
+      const [mine, open] = await Promise.all([claimSales(), Account.db.collection("market").where("status", "==", "open").limit(300).get()]);
+      if (ui.tab !== "market") return;
+      listings = open.docs.map((d) => ({ id: d.id, ref: d.ref, ...d.data() })).filter((l) => byId[l.card]);
+      $("mk-gold").textContent = s.gold || 0;
+      drawMine(mine);
+      drawListings();
+    } catch (e) {
+      console.error(e);
+      $("mk-list").innerHTML = `<div class="m-none">Impossible de charger le marché.</div>`;
+    }
+  }
+
+  const tsOf = (x) => (x && x.toMillis ? x.toMillis() : typeof x === "number" ? x : 0);
+  function drawMine(mine) {
+    const open = mine.filter((l) => l.status === "open" && byId[l.card]);
+    const sold = mine.filter((l) => l.status === "sold" && byId[l.card]).sort((a, b) => tsOf(b.soldAt) - tsOf(a.soldAt)).slice(0, 8);
+    $("mk-mine").innerHTML = (open.length || sold.length) ? [
+      ...open.map((l) => `<div class="mk-row"><img src="${byId[l.card].icon || byId[l.card].art}" alt=""><span><b class="r-${RAR[byId[l.card].r]}">${esc(byId[l.card].name)}</b><em>En vente pour ${l.price} or</em></span><button class="link mk-cancel" data-id="${l.id}">Retirer</button></div>`),
+      ...sold.map((l) => `<div class="mk-row sold"><img src="${byId[l.card].icon || byId[l.card].art}" alt=""><span><b class="r-${RAR[byId[l.card].r]}">${esc(byId[l.card].name)}</b><em>Vendue ${l.price} or à ${esc(l.buyerName || "un joueur")}</em></span></div>`),
+    ].join("") : `<div class="m-none">Tu n'as rien en vente.</div>`;
+    $("mk-mine").querySelectorAll(".mk-cancel").forEach((b) => (b.onclick = () => cancelListing(mine.find((l) => l.id === b.dataset.id))));
+  }
+
+  function drawListings() {
+    const me = Account.user && Account.user.uid;
+    const q = mk.q.trim().toLowerCase();
+    const list = listings.filter((l) => l.status === "open").filter((l) => {
+      const c = byId[l.card];
+      return (!q || `${c.name} ${c.champ || ""} ${c.sub}`.toLowerCase().includes(q)) && (!mk.rar.length || mk.rar.includes(c.r));
+    });
+    const sorts = { recent: (a, b) => tsOf(b.createdAt) - tsOf(a.createdAt), cheap: (a, b) => a.price - b.price, dear: (a, b) => b.price - a.price, rarity: (a, b) => byId[b.card].r - byId[a.card].r || a.price - b.price };
+    list.sort(sorts[mk.sort]);
+    $("mk-count").textContent = `${list.length} carte${list.length > 1 ? "s" : ""}`;
+    $("mk-list").innerHTML = list.length ? list.map((l) => {
+      const c = byId[l.card], mine = l.seller === me, have = s.inv[c.id] || 0;
+      return `<div class="mk-item">${cardHtml(c, { n: 1, back: true })}
+        <div class="mk-info"><div class="mk-price">${l.price} or</div><em>${mine ? "Ta vente" : `Vendue par ${esc(l.sellerName || "un joueur")}`}</em>
+          <em>${have ? `Tu en as ${have}` : "Tu ne l'as pas encore"}</em>
+          ${mine ? "" : `<button class="btn good mk-buy" data-id="${l.id}" ${(s.gold || 0) < l.price ? "disabled" : ""}>Acheter</button>`}</div></div>`;
+    }).join("") : `<div class="m-none">Aucune carte en vente${q || mk.rar.length ? " avec ces filtres" : ""}.</div>`;
+    $("mk-list").querySelectorAll(".mk-buy").forEach((b) => (b.onclick = () => buy(listings.find((l) => l.id === b.dataset.id), b)));
+    $("mk-list").querySelectorAll(".mc").forEach((el) => (el.onclick = () => view(el.dataset.id)));
+  }
+
+  function sellPicker() {
+    const options = pool.filter((c) => s.inv[c.id]).map((c) => {
+      const f = free(c.id);
+      return { c, v: c.id, img: c.type === "champ" ? c.art : c.icon, off: f < 1, search: `${c.name} ${c.champ || ""}`,
+        note: f < 1 ? "exemplaire utilisé dans ton équipe" : `${f} exemplaire${f > 1 ? "s" : ""} libre${f > 1 ? "s" : ""} · ${RAR_FR[RAR[c.r]]}` };
+    }).sort((a, b) => a.off - b.off || b.c.r - a.c.r || a.c.name.localeCompare(b.c.name));
+    openPicker("Quelle carte vendre ?", options, (id) => {
+      if (!id) return;
+      const c = byId[id];
+      const def = RECYCLE[c.r] * 3;
+      const txt = prompt(`Prix de vente pour ${c.name} (en or) :`, String(def));
+      if (txt === null) return;
+      const price = Math.round(Number(String(txt).replace(/\s/g, "")));
+      if (!(price >= 1 && price <= 1000000)) { alert("Prix invalide (entre 1 et 1 000 000 or)."); return; }
+      sell(id, price);
+    }, false);
+  }
+
+  async function sell(id, price) {
+    const db = Account.db, u = Account.user;
+    if (!db || free(id) < 1) return;
+    s.inv[id]--;
+    if (!s.inv[id]) delete s.inv[id];
+    save();
+    try {
+      await db.collection("market").add({ seller: u.uid, sellerName: u.displayName || "Joueur", card: id, price, status: "open", claimed: false,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    } catch (e) {
+      console.error(e);
+      s.inv[id] = (s.inv[id] || 0) + 1; save();
+      alert("La mise en vente a échoué. Ta carte t'a été rendue.");
+    }
+    renderMarket();
+  }
+
+  async function cancelListing(l) {
+    if (!l) return;
+    try {
+      await Account.db.runTransaction(async (tr) => {
+        const d = await tr.get(l.ref);
+        if (!d.exists || d.data().status !== "open") throw new Error("plus en vente");
+        tr.update(l.ref, { status: "cancelled" });
+      });
+      s.inv[l.card] = (s.inv[l.card] || 0) + 1;
+      save();
+    } catch { alert("Cette carte n'est plus en vente (peut-être déjà achetée)."); }
+    renderMarket();
+  }
+
+  async function buy(l, btn) {
+    const u = Account.user;
+    if (!l || (s.gold || 0) < l.price) return;
+    btn.disabled = true;
+    try {
+      await Account.db.runTransaction(async (tr) => {
+        const d = await tr.get(l.ref);
+        if (!d.exists || d.data().status !== "open") throw new Error("plus en vente");
+        tr.update(l.ref, { status: "sold", buyer: u.uid, buyerName: u.displayName || "Joueur", soldAt: firebase.firestore.FieldValue.serverTimestamp() });
+      });
+      s.gold -= l.price;
+      const before = s.inv[l.card] || 0;
+      s.inv[l.card] = before + 1;
+      if (!before) s.at[l.card] = Math.floor(Date.now() / 60e3);
+      save();
+      l.status = "sold";
+      drawListings();
+      $("mk-gold").textContent = s.gold;
+      view(l.card);
+    } catch {
+      alert("Trop tard : cette carte vient d'être achetée ou retirée.");
+      renderMarket();
+    }
+  }
+
   // ---------- Carte en grand ----------
   function view(id) {
     const c = byId[id];
@@ -611,14 +890,17 @@ const Master = (() => {
         <div class="mv-own">${n ? `Possédée${n > 1 ? ` en ${n} exemplaires` : ""}` : "Pas encore trouvée"}</div>
         <div class="mv-why"><b class="r-${RAR[c.r]}">${RAR_FR[RAR[c.r]]}</b> : ${esc(c.why)}</div>
         <div class="mv-chance">${pct(ODDS[c.r])} de chances par carte d'un pack</div>
+        ${n > 1 && free(id) > 0 && !isGuest() ? `<button class="btn good mv-recycle" data-id="${id}">Recycler un double (+${RECYCLE[c.r]} or)</button>` : ""}
         ${extra}
       </div>`;
     $("m-view").classList.remove("hidden");
+    const rb = $("m-view-box").querySelector(".mv-recycle");
+    if (rb) rb.onclick = (e) => { e.stopPropagation(); recycle(id); view(id); renderGrid(); };
   }
 
   function wireUi() {
     $("m-open").onclick = openPack;
-    document.querySelectorAll("#m-tabs button").forEach((b) => (b.onclick = () => { ui.tab = b.dataset.t; saveUi(); render(); }));
+    document.querySelectorAll("#m-tabs button").forEach((b) => (b.onclick = () => { ui.tab = b.dataset.t; viewing = null; saveUi(); render(); }));
     $("m-pick").onclick = (e) => { if (e.target.id === "m-pick" || e.target.id === "m-pick-close") closePicker(); };
     $("m-pick-search").onkeydown = (e) => { if (e.key === "Escape") closePicker(); };
     $("m-all").onclick = revealAll;
@@ -658,6 +940,7 @@ const Master = (() => {
   return {
     render() { if (!wired) { wired = true; wireUi(); } render(); },
     get state() { return s; },
+    publish: () => publishSoon(),
     setState,
     pick,
     reset() { setState(null); },
