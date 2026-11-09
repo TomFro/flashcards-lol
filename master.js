@@ -649,9 +649,13 @@ const Master = (() => {
       return `<div class="tm-role r-${RAR[c.r]}">${head}
         <div class="tm-champ" data-role="${role}" title="Changer de champion"><img src="${sk ? sk.art : c.art}" alt=""><div class="tm-lvl">${lvl}</div>
           <div class="tm-cname"><b>${esc(c.name)}</b><span>Niveau ${lvl} / ${cap}</span></div></div>
-        ${mySkins ? `<button class="link tm-skin" data-role="${role}">🎨 ${sk ? esc(sk.name) : "Skin de base"} · changer (${mySkins} skin${mySkins > 1 ? "s" : ""})</button>` : ""}
         <div class="tm-next">${next}</div>
         <div class="tm-spells">${spells}</div>
+        <h4>Skin</h4>
+        <button class="tm-skin${sk ? ` r-${RAR[sk.r]}` : ""}" data-role="${role}" title="Changer de skin">
+          <i class="tm-skinbox">${sk ? `<img src="${sk.art}" alt="">` : "+"}</i>
+          <span><b>${sk ? esc(sk.name) : "Skin de base"}</b><em>${mySkins ? `${mySkins} skin${mySkins > 1 ? "s" : ""} pour ce champion : touche pour changer` : "Aucun skin pour ce champion pour l'instant"}</em></span>
+        </button>
         <h4>Objets</h4><div class="tm-items">${items}</div>
         <h4>Runes</h4><div class="tm-items">${runes}</div>
         ${statsHtml(role)}
