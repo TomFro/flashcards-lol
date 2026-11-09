@@ -35,12 +35,14 @@ function persist() {
   store.set("flc_progress", progress);
   store.set("flc_custom", custom);
   if (isOnlineUser()) store.set("flc_unsynced", true);
-  if (Account.mode === "user") Account.save({ progress, custom });
+  if (Account.mode === "user") Account.save({ progress, custom, master: Master.state });
 }
 const prefs = Object.assign(
   { mode: "champ", all: true, lane: [], cls: [], key: [], tree: [], slot: [], itype: ["legendary", "boots"], irole: [], icon: false, name: false, learn: "discover" },
   store.get("flc_prefs", {}));
 // v2 : "tous les sorts d'un coup" devient le mode par défaut, même pour les réglages déjà enregistrés
+// lien direct vers la page LoL Master : …/flashcards-lol/#master
+if (location.hash === "#master") prefs.mode = "master";
 if (prefs.v !== 2) { prefs.all = true; prefs.v = 2; store.set("flc_prefs", prefs); }
 
 let version = "", local = false;
@@ -270,6 +272,13 @@ function saveAndRebuild() { store.set("flc_prefs", prefs); rebuild(); }
 
 function rebuild() {
   ahead = false;
+  if (prefs.mode === "master") { // page LoL Master : packs et collection
+    document.body.className = `mode-master${isGuest() ? " guest" : ""}`;
+    closeDetail();
+    $("fr-video").pause();
+    Master.render();
+    return;
+  }
   const allMode = prefs.mode === "champ" && prefs.all;
   document.body.className = `mode-${prefs.mode}${allMode ? " all-mode" : ""}${isGuest() ? " guest" : ""}${studyMode() ? " study" : ""}`;
   $("f-search").placeholder = prefs.mode === "video" ? "Taper un champion pour revoir ses vidéos…" : "Chercher un champion…";
@@ -845,6 +854,7 @@ function wire() {
     const text = prompt("Ta description courte pour cette carte (vide = remettre celle d'origine) :", custom[id] || current.short);
     if (text === null) return;
     if (text.trim()) custom[id] = text.trim(); else delete custom[id];
+    Master.refreshDescs();
     persist();
     show();
   };
@@ -855,7 +865,7 @@ function wire() {
     rebuild();
   };
   document.addEventListener("keydown", (e) => {
-    if (e.target.tagName === "INPUT") return;
+    if (e.target.tagName === "INPUT" || prefs.mode === "master") return;
     if (studyMode() && KEY_FROM_PRESS[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (!e.repeat) studyKey(KEY_FROM_PRESS[e.key.toLowerCase()], true);
       return;
@@ -873,6 +883,7 @@ function wire() {
     }
   });
   document.addEventListener("keyup", (e) => {
+    if (prefs.mode === "master") return;
     const k = KEY_FROM_PRESS[(e.key || "").toLowerCase()];
     if (k && studyMode()) return studyKey(k, false);
     if (k && isDetail() && $("detail").dataset.k === k) closeDetail();
@@ -1008,25 +1019,28 @@ function renderAccount() {
 // flc_owner : compte à qui appartient la progression gardée dans ce navigateur
 // flc_unsynced : des réponses données hors ligne n'ont pas encore été envoyées au compte
 async function onAccountChange(mode) {
-  const local = () => ({ progress: store.get("flc_progress", {}), custom: store.get("flc_custom", {}) });
+  const local = () => ({ progress: store.get("flc_progress", {}), custom: store.get("flc_custom", {}), master: store.get("flc_master", null) });
   if (mode === "guest") {
     if (lastMode === "user") { // déconnexion : on ne laisse rien
-      ["flc_progress", "flc_custom", "flc_owner", "flc_unsynced"].forEach((k) => localStorage.removeItem(k));
+      ["flc_progress", "flc_custom", "flc_owner", "flc_unsynced", "flc_master"].forEach((k) => localStorage.removeItem(k));
     }
     replaceObj(progress, {});
     replaceObj(custom, {});
+    Master.setState(null);
   } else if (mode === "offline") {
     // pas d'internet : on continue avec la copie du navigateur, tout est gardé
     const l = local();
     replaceObj(progress, l.progress);
     replaceObj(custom, l.custom);
+    Master.setState(l.master);
   } else if (mode === "user") {
     const uid = Account.user.uid;
     const owner = store.get("flc_owner", null);
-    const l = owner === uid || owner === null ? local() : { progress: {}, custom: {} };
+    const l = owner === uid || owner === null ? local() : { progress: {}, custom: {}, master: null };
     // on affiche tout de suite la copie du navigateur, le compte arrive juste après
     replaceObj(progress, l.progress);
     replaceObj(custom, l.custom);
+    Master.setState(l.master);
     store.set("flc_owner", uid);
     lastMode = mode;
     renderAccount();
@@ -1035,19 +1049,25 @@ async function onAccountChange(mode) {
     try { cloud = await Account.load(); } catch { failed = true; }
     if (Account.mode !== "user" || Account.user.uid !== uid) return; // changé entre-temps
     const unsynced = store.get("flc_unsynced", false) && owner === uid;
-    const hasCloud = cloud && (cloud.progress || cloud.custom);
+    const hasCloud = cloud && (cloud.progress || cloud.custom || cloud.master);
+    // collection LoL Master : on garde celle qui a ouvert le plus de packs
+    const master = hasCloud ? Master.pick(l.master, cloud.master) : l.master;
+    if (!failed) Master.setState(master);
     if (failed) {
       // compte injoignable : on garde la copie locale, elle partira au prochain enregistrement
     } else if (hasCloud && unsynced) {
       // réponses données hors ligne : on les ajoute par-dessus le compte
       replaceObj(progress, { ...cloud.progress, ...l.progress });
+      if (master) store.set("flc_master", master);
       replaceObj(custom, { ...cloud.custom, ...l.custom });
       persist();
     } else if (hasCloud) {
-      replaceObj(progress, cloud.progress);
-      replaceObj(custom, cloud.custom);
+      replaceObj(progress, cloud.progress || {});
+      replaceObj(custom, cloud.custom || {});
       store.set("flc_progress", progress);
       store.set("flc_custom", custom);
+      if (master) store.set("flc_master", master);
+      if (master && master !== cloud.master) persist(); // la collection de cet appareil était plus avancée
     } else {
       // première connexion : on reprend la progression déjà faite sur cet appareil
       persist();

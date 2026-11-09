@@ -23,6 +23,7 @@
     <button data-mode="video">Vidéos</button>
     <button data-mode="rune">Runes</button>
     <button data-mode="item">Objets</button>
+    <button data-mode="master" class="master-tab">LoL Master</button>
   </nav>
   <div class="topbar-right">
     <div id="account"></div>
@@ -120,6 +121,50 @@
   <div id="empty" class="hidden"><span id="empty-text">Aucune carte avec ces filtres.</span><button id="b-ahead" class="btn good hidden">Continuer quand même</button><button id="b-switch" class="btn good hidden"></button></div>
 </main>
 
+<section id="master">
+  <div class="m-top">
+    <div class="m-packs">
+      <div class="m-pack-art"><div class="m-pack-logo">LoL<br>Master</div><b id="m-count">0</b></div>
+      <div class="m-pack-info">
+        <h2>Tes packs</h2>
+        <div id="m-timer"></div>
+        <div class="chips" id="m-packtype"></div>
+        <button id="m-open" class="btn good">Ouvrir un pack</button>
+        <div id="m-guest" class="hidden">Mode invité : connecte-toi pour garder ta collection.</div>
+      </div>
+    </div>
+    <div id="m-progress"></div>
+  </div>
+  <div id="m-odds"></div>
+  <div class="m-filters">
+    <h2>Collection <em id="m-found"></em></h2>
+    <div class="m-frow">
+      <input id="m-search" type="search" placeholder="Chercher une carte, un champion…">
+      <select id="m-sort">
+        <option value="rarity">Trier par rareté</option>
+        <option value="type">Trier par type</option>
+        <option value="name">Trier par nom</option>
+        <option value="count">Les plus en double</option>
+        <option value="recent">Les plus récentes</option>
+      </select>
+    </div>
+    <div class="m-frow"><div class="chips" id="m-ftype"></div><div class="chips" id="m-frar"></div><div class="chips" id="m-fown"></div></div>
+  </div>
+  <div id="m-grid"></div>
+  <button id="m-more" class="btn good hidden"></button>
+</section>
+
+<div id="m-opening" class="hidden">
+  <div id="m-summary"></div>
+  <div id="m-reveal"></div>
+  <div class="m-actions">
+    <button id="m-all" class="btn good">Tout révéler</button>
+    <button id="m-again" class="btn good"></button>
+    <button id="m-close" class="btn"></button>
+  </div>
+</div>
+<div id="m-view" class="hidden"><div id="m-view-box"></div></div>
+
 <section id="filters">
   <div class="filters-title"><span>Filtres</span><em id="count"></em>
   </div>
@@ -175,6 +220,8 @@
 <script src="runes-desc.js"></script>
 <script src="items-desc.js"></script>
 <script src="matchups.js"></script>
+<script src="master-rarity.js"></script>
 <script src="app.js"></script>
+<script src="master.js"></script>
 </body>
 </html>
