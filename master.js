@@ -3,18 +3,18 @@
 const Master = (() => {
   const RAR = ["common", "rare", "epic", "legendary", "mythic"];
   const RAR_FR = { common: "Commune", rare: "Rare", epic: "Épique", legendary: "Légendaire", mythic: "Mythique" };
-  const ODDS = [62, 26, 9, 2.5, 0.5];           // chances (en %) pour chaque carte d'un pack
+  const ODDS = [68, 24, 6.5, 1.3, 0.2];           // chances (en %) pour chaque carte d'un pack
   const PACK_SIZE = 5;
   const EVERY = 5 * 60e3, PER = 2;              // 2 packs toutes les 5 minutes
   const CAP = 10, START = 4;                    // packs gardés au maximum, packs offerts au départ
   const GOLD_START = 100, GOLD_PACK = 10;       // or au départ, or gagné par pack ouvert
   const RECYCLE = [5, 15, 60, 250, 1000];       // or rendu en recyclant un double, selon la rareté
   const V = 2;                                  // changer ce numéro remet toutes les collections à zéro
-  const PITY_LEG = 40;                          // au pire, une Légendaire (ou mieux) tous les 40 packs
+  const PITY_LEG = 50;                          // au pire, une Légendaire (ou mieux) tous les 50 packs
   const TYPES = { champ: "Champion", spell: "Sort", item: "Objet", rune: "Rune" };
   const TYPES_PL = { champ: "Champions", spell: "Sorts", item: "Objets", rune: "Runes" };
   // part de chaque type dans un pack : peu d'objets et de runes, car chaque exemplaire ne sert qu'à un perso
-  const MIX = { champ: 30, spell: 52, item: 11, rune: 7 };
+  const MIX = { champ: 33, spell: 57, item: 6, rune: 4 };
   // Pourquoi une carte a sa rareté (affiché sur la carte en grand)
   const PAGE = 60;
   const pct = (x) => `${x.toLocaleString("fr-FR")} %`;
@@ -99,6 +99,11 @@ const Master = (() => {
         why: pr == null ? "Pas de stats pour cette rune" : `${nth((ks ? keyRank : minorRank)[c.rid], true)} rune ${ks ? "principale" : "secondaire"} la plus prise (Platine+)`,
       });
     }
+    // objets et runes : un cran plus rares, car un exemplaire suffit pour un build (pas de niveau à monter)
+    for (const c of pool) if (c.type === "item" || c.type === "rune") {
+      if (c.r < 4) c.r++;
+      c.why += " · un cran plus rare : un seul exemplaire suffit pour un build";
+    }
     for (const c of pool) {
       const o = (ST.override || {})[c.id];
       if (o && RAR.includes(o)) { c.r = RAR.indexOf(o); c.why = "Rareté choisie à la main"; }
@@ -178,7 +183,7 @@ const Master = (() => {
 
   // ---------- Enregistrement ----------
   function save() {
-    if (isGuest()) return; // invité : la collection dure le temps de la visite
+    if (isGuest()) { store.set("flc_master_guest", s); return; } // invité : gardé à part, passé au compte à l'inscription
     store.set("flc_master", s);
     if (isOnlineUser()) store.set("flc_unsynced", true);
     if (Account.mode === "user") { persist(); publishSoon(); }
@@ -933,8 +938,8 @@ const Master = (() => {
       + `<details><summary>Comment sont choisies les raretés ?</summary><ul>
         <li><b>Champions</b> : selon leur taux de pick en Challenger (${ST.source.champ}). Plus un champion est joué, plus il est rare.</li>
         <li><b>Sorts</b> : la rareté de leur champion. L'ultime au même niveau (au moins Rare), A Z E un cran en dessous, le passif deux crans en dessous.</li>
-        <li><b>Objets</b> : selon leur taux d'achat (${ST.source.item}, pas de filtre Challenger disponible). Composants Communs. Bottes Épiques si très achetées, sinon Rares ; bottes T3 un cran au-dessus.</li>
-        <li><b>Runes</b> : selon leur taux de choix (${ST.source.rune}), runes principales et secondaires classées à part.</li>
+        <li><b>Objets</b> : selon leur taux d'achat (${ST.source.item}, pas de filtre Challenger disponible). Composants Rares. Bottes Légendaires si très achetées, sinon Épiques ; bottes T3 un cran au-dessus. Tout est un cran plus rare que le taux d'achat seul, car un exemplaire suffit pour un build.</li>
+        <li><b>Runes</b> : selon leur taux de choix (${ST.source.rune}), runes principales et secondaires classées à part, puis un cran plus rares (un exemplaire suffit pour un build).</li>
         <li>Touche une carte de ta collection pour voir sa stat.</li></ul></details>`;
     document.addEventListener("keydown", (e) => {
       if (prefs.mode !== "master" || e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;

@@ -1077,15 +1077,23 @@ function openEmailLogin() {
 
 // flc_owner : compte à qui appartient la progression gardée dans ce navigateur
 // flc_unsynced : des réponses données hors ligne n'ont pas encore été envoyées au compte
+// cartes ouvertes en invité, gardées en mémoire le temps de les passer au compte (la connexion peut prévenir deux fois)
+let guestCarry = null;
+function takeGuest() {
+  const g = Master.pick(store.get("flc_master_guest", null), null);
+  if (g && g.opened > 0) guestCarry = g;
+  return guestCarry;
+}
 async function onAccountChange(mode) {
   const local = () => ({ progress: store.get("flc_progress", {}), custom: store.get("flc_custom", {}), master: store.get("flc_master", null) });
   if (mode === "guest") {
     if (lastMode === "user") { // déconnexion : on ne laisse rien
-      ["flc_progress", "flc_custom", "flc_owner", "flc_unsynced", "flc_master"].forEach((k) => localStorage.removeItem(k));
+      ["flc_progress", "flc_custom", "flc_owner", "flc_unsynced", "flc_master", "flc_master_guest"].forEach((k) => localStorage.removeItem(k));
     }
+    guestCarry = null;
     replaceObj(progress, {});
     replaceObj(custom, {});
-    Master.setState(null);
+    Master.setState(store.get("flc_master_guest", null)); // cartes ouvertes en invité sur cet appareil
   } else if (mode === "offline") {
     // pas d'internet : on continue avec la copie du navigateur, tout est gardé
     const l = local();
@@ -1099,7 +1107,9 @@ async function onAccountChange(mode) {
     // on affiche tout de suite la copie du navigateur, le compte arrive juste après
     replaceObj(progress, l.progress);
     replaceObj(custom, l.custom);
-    Master.setState(l.master);
+    // cartes ouvertes en invité avant de se connecter : elles iront sur le compte s'il n'a pas encore de collection
+    const fromGuest = takeGuest();
+    Master.setState(l.master || fromGuest);
     store.set("flc_owner", uid);
     lastMode = mode;
     renderAccount();
@@ -1110,7 +1120,13 @@ async function onAccountChange(mode) {
     const unsynced = store.get("flc_unsynced", false) && owner === uid;
     const hasCloud = cloud && (cloud.progress || cloud.custom || cloud.master);
     // collection LoL Master : on garde celle qui a ouvert le plus de packs
-    const master = hasCloud ? Master.pick(l.master, cloud.master) : l.master;
+    let master = hasCloud ? Master.pick(l.master, cloud.master) : l.master;
+    if (!failed && fromGuest) {
+      const cur = Master.pick(master, null);
+      if (!cur || !(cur.opened > 0)) { master = fromGuest; store.set("flc_master", master); } // compte neuf : on lui donne la collection invité
+      localStorage.removeItem("flc_master_guest");
+      guestCarry = null;
+    }
     if (!failed) Master.setState(master);
     if (failed) {
       // compte injoignable : on garde la copie locale, elle partira au prochain enregistrement
