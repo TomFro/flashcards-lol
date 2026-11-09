@@ -1097,7 +1097,13 @@ load()
     Account.init();
     $("dl-btn").onclick = downloadSection;
     updateDlButton();
-    if (location.protocol.startsWith("http") && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+    if (location.protocol.startsWith("http") && "serviceWorker" in navigator) {
+      // une nouvelle version du site vient de s'installer : on recharge une fois pour l'afficher tout de suite
+      const hadSw = !!navigator.serviceWorker.controller;
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadSw && !reloaded) { reloaded = true; location.reload(); } });
+      navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((r) => r.update()).catch(() => {});
+    }
   })
   .catch((err) => {
     console.error(err);

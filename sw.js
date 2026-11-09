@@ -1,5 +1,5 @@
 // Service worker : garde le site et les données téléchargées pour jouer hors ligne.
-const SHELL = "flc-shell-v7";
+const SHELL = "flc-shell-v8";
 const DATA = "flc-data";
 const SHELL_FILES = ["./", "index.html", "style.css", "app.js", "descriptions.js", "runes-desc.js", "items-desc.js", "matchups.js", "master.js", "master-rarity.js", "favicon.svg", "favicon-32.png", "apple-touch-icon.png", "account.js", "firebase-config.js"];
 
@@ -9,8 +9,11 @@ self.addEventListener("install", (e) => {
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
 // Réseau d'abord, copie de secours dans le cache
-function networkFirst(req, cacheName) {
-  return fetch(req)
+// cache: "no-cache" = on redemande toujours au serveur s'il y a une nouvelle version (sinon le navigateur
+// peut garder un vieux fichier jusqu'à 10 min sur GitHub Pages)
+function networkFirst(req, cacheName, fresh) {
+  const r = !fresh ? req : req.mode === "navigate" ? new Request(req.url, { cache: "no-cache" }) : new Request(req, { cache: "no-cache" });
+  return fetch(r)
     .then((res) => {
       if (res.ok || res.type === "opaque") { const copy = res.clone(); caches.open(cacheName).then((c) => c.put(req, copy)); }
       return res;
@@ -24,7 +27,7 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(req.url);
 
   // Fichiers du site : toujours la dernière version si internet est là
-  if (url.origin === location.origin) return e.respondWith(networkFirst(req, SHELL));
+  if (url.origin === location.origin) return e.respondWith(networkFirst(req, SHELL, true));
   // Connexion et base de données des comptes : jamais en cache
   if (/(^|\.)(firestore|identitytoolkit|securetoken)\.googleapis\.com$|firebaseapp\.com$/.test(url.hostname)) return;
   // Code de Firebase : gardé pour pouvoir s'ouvrir hors ligne

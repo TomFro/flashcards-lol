@@ -6,7 +6,8 @@ const Master = (() => {
   const ODDS = [62, 26, 9, 2.5, 0.5];           // chances (en %) pour chaque carte d'un pack
   const PACK_SIZE = 5;
   const EVERY = 5 * 60e3, PER = 2;              // 2 packs toutes les 5 minutes
-  const CAP = 20, START = 4;                    // packs gardés au maximum, packs offerts au départ
+  const CAP = 10, START = 4;                    // packs gardés au maximum, packs offerts au départ
+  const V = 2;                                  // changer ce numéro remet toutes les collections à zéro
   const PITY_LEG = 40;                          // au pire, une Légendaire (ou mieux) tous les 40 packs
   const TYPES = { champ: "Champion", spell: "Sort", item: "Objet", rune: "Rune" };
   const TYPES_PL = { champ: "Champions", spell: "Sorts", item: "Objets", rune: "Runes" };
@@ -16,8 +17,10 @@ const Master = (() => {
   const PAGE = 60;
   const pct = (x) => `${x.toLocaleString("fr-FR")} %`;
 
-  const fresh = () => ({ packs: START, t: Date.now(), inv: {}, at: {}, pity: { e: 0, l: 0 }, opened: 0, team: {} });
-  let s = Object.assign(fresh(), store.get("flc_master", {}));
+  const fresh = () => ({ v: V, packs: START, t: Date.now(), inv: {}, at: {}, pity: { e: 0, l: 0 }, opened: 0, team: {} });
+  const valid = (x) => (x && x.v === V ? x : null); // une collection d'une ancienne version est ignorée
+  let s = Object.assign(fresh(), valid(store.get("flc_master", null)) || {});
+  s.packs = Math.min(s.packs, CAP);
   let pool = null, byId = {}, byTypeRar = {};
   const ui = { type: [], rar: [], own: "all", q: "", sort: "rarity", shown: PAGE, tab: "cards" };
   Object.assign(ui, store.get("flc_master_ui", {}), { shown: PAGE, q: "" });
@@ -178,13 +181,16 @@ const Master = (() => {
     if (Account.mode === "user") persist();
   }
   function setState(n) {
-    s = Object.assign(fresh(), n || {});
+    const old = n && !valid(n);
+    s = Object.assign(fresh(), valid(n) || {});
     s.pity = Object.assign({ e: 0, l: 0 }, s.pity);
     s.team = s.team || {};
+    s.packs = Math.min(s.packs, CAP);
+    if (old) save(); // remise à zéro : on enregistre tout de suite la nouvelle collection
     if (prefs.mode === "master") render();
   }
   // garde la collection la plus avancée (celle qui a ouvert le plus de packs)
-  const pick = (a, b) => (!a ? b : !b ? a : (b.opened || 0) > (a.opened || 0) ? b : a);
+  const pick = (a, b) => { a = valid(a); b = valid(b); return !a ? b : !b ? a : (b.opened || 0) > (a.opened || 0) ? b : a; };
 
   // ---------- Affichage ----------
   const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
