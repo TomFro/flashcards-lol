@@ -244,7 +244,7 @@ const Master = (() => {
       el.appendChild(b);
     }
   }
-  const saveUi = () => store.set("flc_master_ui", { type: ui.type, rar: ui.rar, own: ui.own, sort: ui.sort, tab: ui.tab });
+  const saveUi = () => store.set("flc_master_ui", { type: ui.type, rar: ui.rar, own: ui.own, sort: ui.sort, tab: ui.tab, mute: ui.mute });
 
   function renderPacks() {
     tick();
@@ -337,6 +337,42 @@ const Master = (() => {
     }, 1000);
   }
 
+  // ---------- Sons ----------
+  // petits sons façon pings, fabriqués dans le navigateur (pas de fichier audio) : plus la carte est rare, plus le son se remarque
+  let actx = null;
+  function ping(r) {
+    if (ui.mute) return;
+    try {
+      actx ||= new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === "suspended") actx.resume();
+      const t0 = actx.currentTime + 0.01;
+      const out = actx.createGain();
+      out.gain.value = 0.25;
+      out.connect(actx.destination);
+      const tone = (f, at, dur, type = "sine", vol = 0.8) => {
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(f, t0 + at);
+        g.gain.setValueAtTime(0.0001, t0 + at);
+        g.gain.exponentialRampToValueAtTime(vol, t0 + at + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + dur);
+        o.connect(g).connect(out);
+        o.start(t0 + at);
+        o.stop(t0 + at + dur + 0.05);
+      };
+      [
+        () => tone(1320, 0, 0.16, "sine", 0.5),                                                     // Commune : petit « tic »
+        () => { tone(740, 0, 0.15, "triangle"); tone(1110, 0.1, 0.28, "triangle"); },               // Rare : deux notes qui montent, comme un ping « ? »
+        () => [784, 988, 1175].forEach((f, i) => tone(f, i * 0.08, 0.34, "triangle")),            // Épique : petit arpège, comme le ping « assistance »
+        () => [0, 0.22].forEach((at) => { tone(1245, at, 0.13, "square", 0.3); tone(932, at + 0.1, 0.15, "square", 0.3); }), // Légendaire : alerte, comme le ping « danger »
+        () => { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, i * 0.07, 0.9, "sine", 0.5)); tone(2093, 0.4, 1.2, "sine", 0.3); }, // Mythique : carillon
+      ][r]();
+    } catch {}
+  }
+  function renderSound() {
+    $("m-sound").textContent = ui.mute ? "🔇 Son coupé" : "🔊 Son";
+  }
+
   // ---------- Ouverture ----------
   function showOpening(res) {
     opening = res;
@@ -355,6 +391,7 @@ const Master = (() => {
       return view(opening[+el.dataset.i].c.id);
     }
     el.classList.add("shown");
+    ping(opening[+el.dataset.i].c.r);
     updateOpeningButtons();
   }
   function updateOpeningButtons() {
@@ -369,7 +406,12 @@ const Master = (() => {
     } else $("m-summary").textContent = "Touche les cartes pour les retourner";
   }
   function revealAll() {
-    $("m-reveal").querySelectorAll(".m-slot:not(.shown)").forEach((el, i) => setTimeout(() => { el.classList.add("shown"); updateOpeningButtons(); }, i * 180));
+    $("m-reveal").querySelectorAll(".m-slot:not(.shown)").forEach((el, i) => setTimeout(() => {
+      if (!opening || el.classList.contains("shown")) return;
+      el.classList.add("shown");
+      ping(opening[+el.dataset.i].c.r);
+      updateOpeningButtons();
+    }, i * 260));
   }
   function closeOpening() {
     $("m-opening").classList.add("hidden");
@@ -925,6 +967,8 @@ const Master = (() => {
     $("m-pick").onclick = (e) => { if (e.target.id === "m-pick" || e.target.id === "m-pick-close") closePicker(); };
     $("m-pick-search").onkeydown = (e) => { if (e.key === "Escape") closePicker(); };
     $("m-all").onclick = revealAll;
+    $("m-sound").onclick = () => { ui.mute = !ui.mute; saveUi(); renderSound(); if (!ui.mute) ping(1); };
+    renderSound();
     $("m-again").onclick = () => { if (s.packs > 0) openPack(); };
     $("m-close").onclick = closeOpening;
     $("m-more").onclick = () => { ui.shown += PAGE * 2; renderGrid(); };

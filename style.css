@@ -886,3 +886,8 @@ body.mode-master .stage, body.mode-master #filters, body.mode-master #dl, body.m
 #m-pick-lanes button { min-width: 0; flex: 1; padding: 6px 4px 5px; }
 #m-pick-lanes button svg { width: 20px; height: 20px; }
 #m-pick-lanes button { justify-content: center; letter-spacing: .5px; font-size: 9.5px; }
+
+/* son des cartes qui se retournent */
+#m-sound { position: absolute; top: 14px; right: 14px; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--gold4); color: var(--gold2); font: 13px var(--text); }
+#m-sound:hover { color: var(--gold1); border-color: var(--gold2); }
