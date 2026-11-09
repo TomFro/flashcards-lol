@@ -1,42 +1,30 @@
-// Raretés des cartes LoL Master. Modifie librement : il suffit de déplacer un identifiant d'une ligne à l'autre.
+// Raretés des cartes LoL Master, calculées à partir de stats de parties classées.
 //
-// Règles par défaut (pour tout ce qui n'est pas listé ici) :
-//   Champions : Commune (peu présent dans la méta)
-//   Sorts     : Commune pour le passif et A Z E, Rare pour l'ultime
-//   Objets    : Commune pour les composants, Rare pour les objets légendaires et les bottes,
-//               Épique pour les bottes améliorées (T3), Légendaire pour les T3 des bottes les plus achetées
-//   Runes     : Commune pour les runes secondaires, Rare pour les runes principales
+//  Champions : taux de pick en Challenger (somme des 5 postes), lolstats.gg, patch 26.21.
+//  Sorts     : la rareté de leur champion. L'ultime au même niveau (au moins Rare),
+//              A Z E un cran en dessous, le passif deux crans en dessous.
+//  Objets    : taux d'achat en Platine+ (pas de filtre Challenger disponible), leagueofitems.com, patch 26.22.
+//  Runes     : taux de choix en Platine+, leagueofitems.com, patch 26.22. Runes principales et secondaires
+//              sont classées séparément.
+//  Bottes    : bottes T2 Épiques si très achetées, sinon Rares ; bottes T3 un cran au-dessus de leurs bottes T2.
 //
-// Les listes ci-dessous montent la rareté de ce qui est le plus joué ou le plus fort :
-// présence en compétition (LCK, LEC, LPL, Worlds, First Stand), popularité en classé émeraude et plus,
-// et pour les sorts, leur impact sur un combat.
-window.MASTER_RARITY = {
-  // Champions : popularité en pro et en classé
-  champ: {
-    mythic: "LeeSin Azir Ahri Yasuo Thresh",
-    legendary: "Orianna Sylas Yone Kaisa Ezreal Jinx Viego Zed Kalista Rakan Nautilus KSante Jax Taliyah Aurora Varus Yunara Zaahen",
-    epic: "Akali Aphelios Alistar Ambessa Braum Caitlyn Camille Corki Draven Gnar Gragas Graves Hwei Irelia Jayce JarvanIV Jhin Karma Kayn Khazix Kindred Leblanc Lucian Lux Maokai Nidalee Poppy Rell Renekton Riven Rumble Sejuani Senna Smolder Syndra Vayne Vi Viktor Xayah XinZhao Zeri Ashe MissFortune Darius Renata Skarner Leona Malphite",
-    rare: "Aatrox Akshan Annie AurelionSol Bard Belveth Blitzcrank Brand Briar Cassiopeia Diana Ekko Elise Evelynn Fiora Fizz Galio Gangplank Garen Gwen Hecarim Katarina Kennen Kled Lillia Lissandra Lulu MasterYi Mel Milio Mordekaiser Morgana Nami Neeko Nilah Ornn Pantheon Pyke Qiyana Samira Sett Shen Sivir Talon Tristana Twitch TwistedFate Udyr Vex Vladimir Volibear MonkeyKing Yuumi Zac Zilean Zyra Seraphine Soraka Swain Naafiri Shaco Kassadin",
+// Paliers : une carte prend la plus haute rareté dont elle atteint le seuil.
+window.MASTER_STATS = {
+  source: { champ: "Challenger, patch 26.21 (lolstats.gg)", item: "Platine+, patch 26.22 (leagueofitems.com)", rune: "Platine+, patch 26.22 (leagueofitems.com)" },
+  // seuils pour : Mythique, Légendaire, Épique, Rare (en dessous : Commune)
+  tiers: {
+    champ: [19.5, 12, 6, 2.5],
+    item: [90, 50, 25, 10],
+    boots: [Infinity, Infinity, 120, 0],
+    keystone: [100, 50, 25, 14],
+    minor: [Infinity, 165, 100, 45],
   },
-  // Sorts (champion_touche) : pas de statistique publique par sort, donc c'est un jugement :
-  // Mythique = les ultimes et sorts qui retournent un combat d'équipe et que tout joueur connaît,
-  // Légendaire = sorts qui décident souvent d'une partie, Épique = sorts marquants du champion.
-  spell: {
-    mythic: "LeeSin_R Malphite_R Orianna_R Amumu_R Thresh_Q Yasuo_R",
-    legendary: "Azir_R Galio_R Shen_R TwistedFate_R Zed_R Ashe_R Kalista_R Sejuani_R Rell_R Jinx_R Ezreal_R Karthus_R Soraka_R Kindred_R Zilean_R Bard_R Taric_R Blitzcrank_Q Nautilus_R Fiddlesticks_R Ornn_R Kennen_R Leona_R Lux_R Sylas_R Viego_P Pyke_R Annie_R Jhin_R Draven_Q Kaisa_P Ahri_R Rakan_W Alistar_W Gragas_E Vi_R Malzahar_R MonkeyKing_R Gangplank_R Janna_R Lissandra_R Seraphine_R Nami_R Sona_R Varus_R Xerath_R Yone_R KSante_R Tryndamere_R Kayle_R Zac_E Hecarim_R",
-    epic: "Akali_R Akali_W Ahri_E Annie_P Brand_P Braum_E Caitlyn_W Camille_R Diana_R Ekko_R Elise_E Evelynn_R Ezreal_Q Fiora_R Fizz_R Garen_R Gnar_R Gwen_W Irelia_E Jax_E Jayce_R Kassadin_R Katarina_R Kayn_R Khazix_P LeeSin_Q Leblanc_W Lucian_E Lulu_W Lulu_R MasterYi_Q Mordekaiser_R Morgana_E Morgana_Q Nidalee_Q Olaf_R Poppy_E Rammus_Q Renekton_W Riven_Q Samira_R Sett_R Singed_Q Sion_R Swain_R Syndra_R Talon_R Teemo_R Thresh_W Tristana_E Twitch_Q Vayne_Q Vayne_E Veigar_E Velkoz_R Viktor_W Vladimir_W Warwick_R Xayah_R Yuumi_P Zed_W Zyra_R Yasuo_W Azir_W Orianna_W Nautilus_Q Rakan_E Kalista_P Jax_R Lux_Q Morgana_R Yunara_R Aurora_R Taliyah_R Viego_R Kaisa_R Malphite_Q Sejuani_E Zilean_E Janna_Q Bard_Q",
-  },
-  // Objets (identifiant Data Dragon) : à quel point ils sont achetés
-  item: {
-    mythic: "3031 3089",
-    legendary: "6672 3078 3153 3157 6653 3036 3071 3135 6655 3161 3032 3026 3053 3115",
-    epic: "3072 3046 3085 3087 3094 3033 3091 3100 3165 3116 3102 4645 3003 3040 3004 6333 3074 3748 3075 3143 3110 3068 2504 3107 3222 3504 6617 2065 3142 6694 6676 3814 6610 6631 3181 3118 2503 3137 3302 3124 3742 3065 3190 3508 6697 6698 3156 3139 3083 4005 6620 3152 6665 3006 3020 3047 3111 3158",
-  },
-  // Runes (clé Data Dragon) : à quel point elles sont prises
-  rune: {
-    mythic: "Conqueror",
-    legendary: "Electrocute LethalTempo ArcaneComet GraspOfTheUndying FirstStrike SummonAery",
-    epic: "PressTheAttack FleetFootwork PhaseRush DarkHarvest HailOfBlades GlacialAugment Guardian UnsealedSpellbook VeteranAftershock Triumph LegendAlacrity Transcendence GatheringStorm BonePlating",
-    rare: "LegendHaste CoupDeGrace LastStand PresenceOfMind Overgrowth SecondWind Conditioning Revitalize TasteOfBlood SuddenImpact CheapShot TreasureHunter UltimateHunter Scorch ManaflowBand AbsoluteFocus BiscuitDelivery MagicalFootwear CosmicInsight TimeWarpTonic CutDown Demolish ShieldBash Unflinching NimbusCloak AxiomArcanist DeepWard GrislyMementos SixthSense",
-  },
+  // % des parties Challenger où le champion est joué
+  champ: {LeeSin: 30, Camille: 25.1, Jayce: 24.7, Syndra: 24.5, Ezreal: 19.6, Qiyana: 18.8, Cassiopeia: 18.7, Sylas: 18.7, Bard: 18.3, Locke: 17.6, Jhin: 16.9, Nautilus: 16.6, Olaf: 16.5, Shen: 16.5, Ambessa: 15.3, Kaisa: 15, Viktor: 14.5, Yone: 13.6, Akali: 12.7, Yunara: 12.1, JarvanIV: 11.7, Pantheon: 11.6, Tristana: 11.5, Vi: 11.5, Galio: 11.4, Rell: 11, Ryze: 10.6, Naafiri: 10.4, Pyke: 10.1, Yasuo: 9.5, Alistar: 9.2, Zoe: 9.1, TwistedFate: 8.6, Taliyah: 8.5, KSante: 8.4, Lulu: 8.3, Vayne: 8, Caitlyn: 8, Poppy: 7.9, Nidalee: 7.9, Orianna: 7.8, Leona: 7.7, Corki: 7.6, Jax: 7.5, Xerath: 7.4, Karma: 7.4, Gnar: 7.1, Ahri: 7.1, Lucian: 7.1, Skarner: 7, Nasus: 6.9, Rakan: 6.8, Talon: 6.6, Graves: 6.4, Vladimir: 6, Ziggs: 6, Fiora: 5.9, Kalista: 5.9, Chogath: 5.8, Anivia: 5.7, Thresh: 5.6, Varus: 5.1, Renekton: 5.1, MonkeyKing: 5, Rengar: 4.9, Irelia: 4.9, Rumble: 4.9, Riven: 4.8, Zeri: 4.7, Seraphine: 4.6, XinZhao: 4.5, Khazix: 4.4, Viego: 4.4, Milio: 4.4, Aatrox: 4.3, Hecarim: 4.3, Elise: 4.1, Ekko: 4, Leblanc: 3.9, Zed: 3.8, Shyvana: 3.8, Nocturne: 3.7, Hwei: 3.7, Aurora: 3.6, Sivir: 3.5, Mel: 3.4, Janna: 3.4, Quinn: 3.3, Xayah: 3.3, Renata: 3.3, Lissandra: 3.2, Katarina: 3.2, Lux: 3.2, Gangplank: 3.1, DrMundo: 3.1, Sion: 3.1, Yorick: 2.9, Karthus: 2.9, Jinx: 2.9, Blitzcrank: 2.9, Malphite: 2.8, Taric: 2.8, Fizz: 2.7, Maokai: 2.7, Darius: 2.6, Zyra: 2.6, Gragas: 2.5, Kled: 2.5, Ashe: 2.5, Draven: 2.4, Gwen: 2.3, Veigar: 2.3, MissFortune: 2.3, Neeko: 2.3, Singed: 2.2, Belveth: 2.2, Annie: 2.2, Senna: 2.2, Kindred: 2.1, RekSai: 2.1, Azir: 2.1, Aphelios: 2.1, Nami: 2.1, Trundle: 1.9, Ivern: 1.9, Braum: 1.9, Kennen: 1.8, Shaco: 1.8, Sona: 1.8, Diana: 1.7, Tryndamere: 1.6, Ornn: 1.6, Zac: 1.6, Udyr: 1.5, Zilean: 1.5, Akshan: 1.5, KogMaw: 1.5, Zaahen: 1.3, Velkoz: 1.3, Kayle: 1.2, Soraka: 1.2, Yuumi: 1.2, Twitch: 1.1, Teemo: 1, AurelionSol: 1, Lillia: 0.9, MasterYi: 0.9, Nunu: 0.9, Vex: 0.9, Malzahar: 0.9, Warwick: 0.8, Mordekaiser: 0.8, Garen: 0.8, Sejuani: 0.8, Fiddlesticks: 0.8, Urgot: 0.7, Briar: 0.7, Kayn: 0.7, Kassadin: 0.7, Samira: 0.7, Sett: 0.6, Volibear: 0.6, Swain: 0.6, Illaoi: 0.5, Evelynn: 0.5},
+  // objets : identifiant Data Dragon -> taux d'achat
+  item: {"3047": 177.68, "3020": 170.63, "3158": 160.97, "3006": 131.72, "3031": 126.44, "3111": 125.01, "3009": 115.74, "4645": 111.46, "3157": 96.03, "3036": 89.79, "6676": 74.33, "6333": 69.9, "6699": 69.86, "3089": 64.15, "3071": 63.92, "3190": 60.4, "6672": 58.23, "3078": 56.92, "3869": 56.15, "6655": 53, "6653": 52.29, "2503": 51.69, "3008": 49.99, "4646": 46.55, "3870": 44.08, "3100": 43.66, "1001": 42.28, "6673": 40.64, "3153": 38.69, "6692": 38.67, "3152": 38.63, "3124": 37.02, "6697": 36.13, "3871": 36.12, "3118": 35.82, "3876": 35.81, "3116": 34.26, "3109": 33.87, "6617": 33.53, "3075": 32.55, "2510": 31.03, "2523": 30.56, "3026": 30.46, "3161": 30, "3032": 29.14, "2520": 28.33, "3085": 27.96, "3508": 27.59, "6675": 26.64, "6631": 26.43, "3814": 25.63, "3033": 25.6, "4633": 25.53, "3142": 25.49, "3041": 24.98, "3094": 24.34, "3504": 23.3, "3050": 22.89, "3302": 22.69, "3179": 22.51, "3004": 22.1, "3087": 21.75, "3877": 21.74, "3046": 21.69, "6695": 21.48, "6620": 20.86, "3084": 20.29, "3115": 20.2, "3742": 19.75, "6694": 19.18, "3222": 19.14, "6698": 19.04, "3065": 18.14, "3053": 17.92, "3135": 17.87, "3110": 17.79, "6665": 17.77, "6657": 17.55, "3143": 17.28, "2517": 16.7, "6696": 16.47, "4005": 16.2, "3156": 15.93, "2065": 15.43, "3072": 15.29, "3748": 15.02, "3146": 14.86, "2504": 14.79, "2524": 14.37, "3003": 14.15, "6610": 14.13, "3068": 13.5, "3095": 13.29, "3074": 13.22, "2502": 11.69, "3107": 10.64, "3073": 9.77, "6664": 9.23, "4401": 9.21, "3091": 9.16, "3102": 7.74, "6662": 7.14, "2525": 7.05, "3181": 6.98, "2512": 6.91, "4629": 6.47, "3137": 6.44, "3165": 6.19, "8010": 6.18, "2501": 6, "2422": 5.71, "4628": 5.55, "2526": 5.25, "3083": 4.27, "6616": 4.05, "3139": 3.93, "6621": 3.49, "3119": 3.46, "8020": 3.06, "6609": 1.98, "2522": 1.67},
+  // runes : identifiant Data Dragon -> taux de choix
+  rune: {"8351": 5.93, "8465": 10.62, "8439": 41.92, "9923": 28.2, "8005": 42.92, "8992": 38.53, "8021": 22.94, "8112": 79.61, "8229": 50.92, "8437": 33.16, "8010": 128.93, "8214": 56.46, "8128": 20.38, "8230": 21.51, "8008": 156, "8369": 22.97, "8306": 14.5, "8429": 20.49, "8234": 47.41, "8224": 21.72, "8463": 53.41, "8139": 21.5, "8410": 23.63, "8232": 13.16, "8446": 20.05, "8275": 32.23, "9105": 110.01, "8140": 107.67, "8316": 44.08, "8105": 43.11, "8017": 111.82, "8321": 90.45, "9111": 242.02, "8242": 81.8, "8210": 176.87, "8226": 169.98, "8236": 75.28, "8299": 153.95, "8473": 149.93, "8135": 57.12, "8126": 56.36, "8451": 99.95, "8453": 75.14, "8347": 150.57, "9104": 202.55, "8237": 131.46, "8444": 85.86, "8313": 68.45, "8401": 52.55, "8143": 107.58, "8345": 122.65, "8137": 20.63, "8106": 90.72, "8304": 168.99, "9103": 111.79, "8009": 154.64, "9101": 29.42, "8014": 156.71, "8233": 31.36, "8141": 5.41},
+  // pour forcer une rareté à la main : { "c_LeeSin": "legendary", "i_3031": "epic" }
+  override: {},
 };

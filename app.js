@@ -154,7 +154,7 @@ async function load() {
     tree.slots.forEach((slot, i) => {
       for (const r of slot.runes) {
         cards.rune.push({
-          id: `rune_${r.key}`, type: "rune", tree: tree.name, slot: i === 0 ? "keystone" : "minor",
+          id: `rune_${r.key}`, rid: r.id, type: "rune", tree: tree.name, slot: i === 0 ? "keystone" : "minor",
           name: r.name, icon: url.rune(r.icon), img: url.rune(r.icon), official: clean(r.longDesc || r.shortDesc),
           short: window.RUNE_DESC[r.key] || shorten(clean(r.shortDesc)),
         });

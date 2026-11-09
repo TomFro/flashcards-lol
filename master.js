@@ -13,15 +13,6 @@ const Master = (() => {
   // part de chaque type dans un pack : peu d'objets et de runes, car chaque exemplaire ne sert qu'à un perso
   const MIX = { champ: 30, spell: 52, item: 11, rune: 7 };
   // Pourquoi une carte a sa rareté (affiché sur la carte en grand)
-  const WHY = {
-    champ: ["Peu présent dans la méta actuelle", "Joué régulièrement en classé ou en pro", "Souvent joué en pro et en classé",
-      "Très présent en compétition et en émeraude+", "Parmi les champions les plus joués et les plus célèbres"],
-    spell: ["Sort de base", "Ultime", "Sort marquant, qui change un combat", "Sort emblématique de LoL", "Parmi les sorts les plus forts et célèbres du jeu"],
-    item: ["Composant ou objet peu acheté", "Objet légendaire plus situationnel", "Objet très acheté dans son rôle",
-      "Objet central, acheté dans la plupart des parties de son rôle", "Parmi les objets les plus achetés du jeu"],
-    rune: ["Rune secondaire peu prise", "Rune secondaire courante, ou rune principale plus rare", "Rune très prise",
-      "Rune principale parmi les plus jouées", "La rune principale la plus jouée du jeu"],
-  };
   const PAGE = 60;
   const pct = (x) => `${x.toLocaleString("fr-FR")} %`;
 
@@ -33,66 +24,80 @@ const Master = (() => {
   let opening = null, timer = null;
 
   // ---------- Raretés ----------
-  function lists() {
+  // Rareté à partir des stats (master-rarity.js) : la plus haute rareté dont la carte atteint le seuil
+  const ST = window.MASTER_STATS || { tiers: {}, champ: {}, item: {}, rune: {}, override: {}, source: {} };
+  const tierOf = (v, th) => { for (let i = 0; i < 4; i++) if (v >= th[i]) return 4 - i; return 0; };
+  const nth = (n, f) => (n === 1 ? (f ? "1re" : "1er") : `${n}e`);
+  const ranks = (obj, keep) => {
     const out = {};
-    for (const [type, tiers] of Object.entries(window.MASTER_RARITY || {})) {
-      out[type] = {};
-      for (const [tier, ids] of Object.entries(tiers)) for (const id of ids.split(/\s+/)) if (id) out[type][id] = RAR.indexOf(tier);
-    }
+    Object.entries(obj).filter(([k]) => !keep || keep(k)).sort((a, b) => b[1] - a[1]).forEach(([k], i) => (out[k] = i + 1));
     return out;
-  }
+  };
+  const num = (x) => x.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
 
   function build() {
     if (pool || !cards.champ.length) return;
-    const L = lists();
-    const get = (type, id) => (L[type] || {})[id];
     pool = [];
+    const champR = {}, champRank = ranks(ST.champ);
     for (const c of cards.champAll) {
-      const t = get("champ", c.champId) ?? 0;
+      const pr = ST.champ[c.champId] || 0;
+      const r = tierOf(pr, ST.tiers.champ);
+      champR[c.champId] = r;
       const raw = champRaw[c.champId];
       pool.push({
-        id: `c_${c.champId}`, type: "champ", r: t, name: c.champ, sub: raw && raw.title ? raw.title : "",
+        id: `c_${c.champId}`, type: "champ", r, name: c.champ, sub: raw && raw.title ? raw.title : "",
         art: c.img, champ: c.champ, champId: c.champId, lanes: c.lanes,
         desc: (c.tags || []).map((x) => CLASSES[x] || x).join(" · ") + (c.lanes.length ? ` — ${c.lanes.map((l) => LANES[l].replace(/<svg[\s\S]*<\/svg>/, "")).join(", ")}` : ""),
         spells: c.spells,
+        why: pr ? `Joué dans ${num(pr)} % des parties Challenger (${nth(champRank[c.champId])} champion le plus joué)` : "Presque jamais joué en Challenger",
       });
     }
+    const STEP = { R: 0, Q: 1, W: 1, E: 1, P: 2 };
     for (const c of cards.champ) {
-      const def = c.key === "R" ? 1 : 0; // par défaut : ultime Rare, autres sorts Communs
+      const cr = champR[c.champId] || 0;
+      const r = c.key === "R" ? Math.max(1, cr) : Math.max(0, cr - STEP[c.key]);
+      const what = c.key === "R" ? "ultime : même rareté que son champion (au moins Rare)" : c.key === "P" ? "passif : deux crans sous son champion" : "sort de base : un cran sous son champion";
       pool.push({
-        id: `s_${c.champId}_${c.key}`, type: "spell", r: get("spell", `${c.champId}_${c.key}`) ?? def,
+        id: `s_${c.champId}_${c.key}`, type: "spell", r,
         name: c.name, sub: `${c.champ} · ${c.key === "P" ? "Passif" : AZERTY[c.key]}`, key: c.key,
         art: c.img, icon: c.icon, champ: c.champ, champId: c.champId, desc: custom[c.id] || c.short, official: c.official, cd: c.cd,
+        why: `${c.champ} a la rareté ${RAR_FR[RAR[cr]]} (Challenger) ; ${what}`,
       });
     }
+    // objets : les bottes sont classées entre elles, le reste par taux d'achat
+    const itemRank = ranks(ST.item, (k) => { const it = cards.item.find((x) => x.id === `item_${k}`); return it && !it.btier; });
+    const bootsR = {};
+    for (const c of cards.item.filter((x) => x.btier === 2)) bootsR[c.id.slice(5)] = tierOf(ST.item[c.id.slice(5)] || 0, ST.tiers.boots);
     for (const c of cards.item) {
-      const num = c.id.slice(5);
-      // composants Communs, objets légendaires et bottes Rares, bottes T3 Épiques
-      // (Légendaires si ce sont les T3 de bottes très achetées)
-      let r = get("item", num), why = null;
-      if (c.btier === 3) {
-        r = r ?? (get("item", c.bfrom) >= 2 ? 3 : 2);
-        why = r >= 3 ? "Bottes améliorées (T3) des bottes les plus achetées" : "Bottes améliorées (T3)";
-      } else if (c.btier === 2) {
-        why = (r ?? 1) >= 2 ? "Bottes achetées dans une grande partie des parties" : "Bottes plus situationnelles";
-        r = r ?? 1;
-      } else r = r ?? (c.itype === "legendary" ? 1 : 0);
+      const n = c.id.slice(5), pr = ST.item[n];
+      let r, why;
+      if (c.btier === 2) { r = bootsR[n]; why = r >= 2 ? "Bottes parmi les plus achetées (Platine+)" : "Bottes moins achetées (Platine+)"; }
+      else if (c.btier === 3) { r = Math.min(4, (bootsR[c.bfrom] ?? 1) + 1); why = "Bottes T3 : un cran au-dessus de leurs bottes de base"; }
+      else if (c.itype !== "legendary") { r = 0; why = "Composant"; }
+      else if (pr == null) { r = 1; why = "Pas de stats d'achat pour cet objet"; }
+      else { r = tierOf(pr, ST.tiers.item); why = `${nth(itemRank[n])} objet le plus acheté (Platine+)`; }
       pool.push({
-        id: `i_${num}`, type: "item", r, why, name: c.name,
+        id: `i_${n}`, type: "item", r, why, name: c.name,
         sub: `${c.btier === 3 ? "Bottes T3" : c.btier === 2 ? "Bottes" : c.itype === "legendary" ? "Objet complet" : "Composant"} · ${c.gold} PO`,
-        icon: c.icon, desc: custom[c.id] || c.short, official: c.official, stats: c.stats, btier: c.btier, num,
+        icon: c.icon, desc: custom[c.id] || c.short, official: c.official, stats: c.stats, btier: c.btier, num: n,
       });
     }
+    const keyIds = new Set(cards.rune.filter((x) => x.slot === "keystone").map((x) => String(x.rid)));
+    const keyRank = ranks(ST.rune, (k) => keyIds.has(k)), minorRank = ranks(ST.rune, (k) => !keyIds.has(k));
     for (const c of cards.rune) {
-      const key = c.id.slice(5);
-      const def = c.slot === "keystone" ? 1 : 0;
+      const key = c.id.slice(5), ks = c.slot === "keystone", pr = ST.rune[c.rid];
+      const r = pr == null ? (ks ? 1 : 0) : tierOf(pr, ks ? ST.tiers.keystone : ST.tiers.minor);
       pool.push({
-        id: `r_${key}`, type: "rune", r: get("rune", key) ?? def, name: c.name,
-        sub: `${c.tree} · ${c.slot === "keystone" ? "Principale" : "Secondaire"}`,
+        id: `r_${key}`, type: "rune", r, name: c.name,
+        sub: `${c.tree} · ${ks ? "Principale" : "Secondaire"}`,
         icon: c.icon, desc: custom[c.id] || c.short, official: c.official, slot: c.slot,
+        why: pr == null ? "Pas de stats pour cette rune" : `${nth((ks ? keyRank : minorRank)[c.rid], true)} rune ${ks ? "principale" : "secondaire"} la plus prise (Platine+)`,
       });
     }
-    for (const c of pool) c.why ||= WHY[c.type][c.r];
+    for (const c of pool) {
+      const o = (ST.override || {})[c.id];
+      if (o && RAR.includes(o)) { c.r = RAR.indexOf(o); c.why = "Rareté choisie à la main"; }
+    }
     byId = Object.fromEntries(pool.map((c) => [c.id, c]));
     for (const c of pool) ((byTypeRar[c.type] ||= {})[c.r] ||= []).push(c);
   }
@@ -622,11 +627,11 @@ const Master = (() => {
     $("m-odds").innerHTML = RAR.map((r, i) => `<span class="r-${r}">${RAR_FR[r]} ${pct(ODDS[i])}</span>`).join("")
       + `<em>Chances pour chaque carte d'un pack (5 cartes). Si tu n'as eu aucune Légendaire en ${PITY_LEG} packs, la suivante est garantie.</em>`
       + `<details><summary>Comment sont choisies les raretés ?</summary><ul>
-        <li><b>Champions</b> : selon leur présence en compétition et en classé émeraude et plus. Les plus joués sont Mythiques, ceux hors méta Communs.</li>
-        <li><b>Sorts</b> : un sort de base est Commun, un ultime Rare. Les sorts qui changent un combat montent en Épique, les plus emblématiques en Légendaire ou Mythique.</li>
-        <li><b>Objets</b> : composants Communs, objets légendaires Rares, puis Épique, Légendaire ou Mythique plus ils sont achetés. Bottes Rares (Épiques si très achetées), bottes T3 Épiques (Légendaires pour les T3 des bottes les plus achetées).</li>
-        <li><b>Runes</b> : selon leur taux de choix. Conquérant, la plus jouée, est Mythique.</li>
-        <li>Touche une carte de ta collection pour voir pourquoi elle a sa rareté.</li></ul></details>`;
+        <li><b>Champions</b> : selon leur taux de pick en Challenger (${ST.source.champ}). Plus un champion est joué, plus il est rare.</li>
+        <li><b>Sorts</b> : la rareté de leur champion. L'ultime au même niveau (au moins Rare), A Z E un cran en dessous, le passif deux crans en dessous.</li>
+        <li><b>Objets</b> : selon leur taux d'achat (${ST.source.item}, pas de filtre Challenger disponible). Composants Communs. Bottes Épiques si très achetées, sinon Rares ; bottes T3 un cran au-dessus.</li>
+        <li><b>Runes</b> : selon leur taux de choix (${ST.source.rune}), runes principales et secondaires classées à part.</li>
+        <li>Touche une carte de ta collection pour voir sa stat.</li></ul></details>`;
     document.addEventListener("keydown", (e) => {
       if (prefs.mode !== "master" || e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
       if (e.key === "Escape") {
