@@ -267,6 +267,7 @@ function rebuild() {
     : prefs.mode === "item" ? `${deck.length} objets`
     : allMode ? `${deck.length} champions` : `${deck.length} cartes (${champs} champions)`;
   updateStats();
+  if ($("dl-btn")) updateDlButton();
   next();
 }
 
@@ -606,6 +607,98 @@ function wire() {
   });
 }
 
+// ---------- Téléchargement par section (hors ligne dans le navigateur) ----------
+const SECTION_NAMES = { champ: "Sorts", video: "Vidéos", rune: "Runes", item: "Objets" };
+const dlState = store.get("flc_dl", {}); // section -> patch téléchargé
+let downloading = false;
+const canCache = () => location.protocol.startsWith("http") && "caches" in window && !local;
+
+function sectionUrls(section) {
+  const urls = new Set([`${DD}/api/versions.json`]);
+  if (section === "champ") {
+    urls.add(`${DD}/cdn/${version}/data/fr_FR/championFull.json`);
+    for (const c of cards.champ) { urls.add(c.img); urls.add(c.icon); }
+    for (const id of Object.keys(champRaw)) urls.add(`${MERAKI}/${id}.json`);
+  } else if (section === "video") {
+    for (const c of cards.video) urls.add(c.videos[c.videos.length - 1]);
+  } else if (section === "rune") {
+    urls.add(`${DD}/cdn/${version}/data/fr_FR/runesReforged.json`);
+    for (const c of cards.rune) urls.add(c.icon);
+  } else if (section === "item") {
+    urls.add(`${DD}/cdn/${version}/data/fr_FR/item.json`);
+    for (const c of cards.item) urls.add(c.icon);
+  }
+  // les sections ont besoin des données des champions pour démarrer
+  urls.add(`${DD}/cdn/${version}/data/fr_FR/championFull.json`);
+  urls.add(`${DD}/cdn/${version}/data/fr_FR/runesReforged.json`);
+  urls.add(`${DD}/cdn/${version}/data/fr_FR/item.json`);
+  return [...urls];
+}
+
+function updateDlButton() {
+  const section = prefs.mode;
+  const btn = $("dl-btn");
+  if (downloading) return;
+  $("dl-bar").parentElement.classList.add("hidden");
+  if (!canCache()) {
+    btn.textContent = local ? "Mise à jour : mise-a-jour.bat" : "Hors ligne : version en ligne";
+    btn.title = local ? "Lance mise-a-jour.bat dans le dossier du site" : "Les boutons de téléchargement marchent sur la page GitHub du site";
+    $("dl-status").textContent = "";
+    return;
+  }
+  btn.title = "";
+  const have = dlState[section];
+  if (!have) { btn.textContent = `⤓ Télécharger ${SECTION_NAMES[section]} pour hors ligne`; $("dl-status").textContent = ""; }
+  else if (have !== version) { btn.textContent = `⟳ Mettre à jour ${SECTION_NAMES[section]}`; $("dl-status").textContent = `Patch ${have} → ${version}`; }
+  else { btn.textContent = `⟳ Retélécharger`; $("dl-status").textContent = `✓ ${SECTION_NAMES[section]} dispo hors ligne (patch ${version})`; }
+}
+
+async function downloadSection() {
+  if (!canCache()) {
+    $("banner").innerHTML = local
+      ? "Pour mettre à jour la version sur ton PC, double-clique sur <b>mise-a-jour.bat</b> dans le dossier du site."
+      : 'Les boutons de téléchargement marchent sur la version en ligne : <a href="https://tomfro.github.io/flashcards-lol/">tomfro.github.io/flashcards-lol</a>';
+    $("banner").classList.remove("hidden");
+    return;
+  }
+  if (downloading) return;
+  const section = prefs.mode;
+  if (section === "video" && !confirm("Les vidéos pèsent environ 1 à 2 Go. Les télécharger maintenant ?")) return;
+  downloading = true;
+  const urls = sectionUrls(section);
+  const cache = await caches.open("flc-data");
+  let done = 0, failed = 0, i = 0;
+  const btn = $("dl-btn");
+  btn.disabled = true;
+  $("dl-bar").parentElement.classList.remove("hidden");
+  const tick = () => {
+    btn.textContent = `Téléchargement… ${done} / ${urls.length}`;
+    $("dl-bar").style.width = `${(100 * done) / urls.length}%`;
+  };
+  tick();
+  async function worker() {
+    while (i < urls.length) {
+      const u = urls[i++];
+      try {
+        const fresh = u.endsWith("versions.json");
+        if (fresh || !(await cache.match(u))) {
+          const res = await fetch(u, { mode: "cors", cache: "no-store" });
+          if (!res.ok) throw new Error(res.status);
+          await cache.put(u, res);
+        }
+      } catch { failed++; }
+      done++;
+      if (done % 5 === 0 || done === urls.length) tick();
+    }
+  }
+  await Promise.all(Array.from({ length: 6 }, worker));
+  downloading = false;
+  btn.disabled = false;
+  if (failed < urls.length) { dlState[section] = version; store.set("flc_dl", dlState); }
+  updateDlButton();
+  if (failed) $("dl-status").textContent += ` · ${failed} fichier(s) introuvable(s)`;
+}
+
 load()
   .then(() => {
     $("loading").classList.add("hidden");
@@ -614,6 +707,9 @@ load()
     wire();
     rebuild();
     checkUpdate();
+    $("dl-btn").onclick = downloadSection;
+    updateDlButton();
+    if (location.protocol.startsWith("http") && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
   })
   .catch((err) => {
     console.error(err);

@@ -350,3 +350,17 @@ body.all-mode .key-group { display: none !important; }
   .all-row img { width: 34px; height: 34px; }
   .all-text > span { font-size: 12px; }
 }
+
+/* ---------- Bouton de téléchargement de la section ---------- */
+.filters-title { flex-wrap: wrap; }
+#dl { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; position: relative; }
+#dl-status { font-style: normal; font-size: 12px; color: var(--blue2); }
+#dl-btn {
+  font-family: var(--text); font-size: 12px; font-weight: 600; letter-spacing: .5px; padding: 7px 14px; cursor: pointer;
+  color: var(--blue1); background: linear-gradient(180deg, #0a323c, #041a20); border: 1px solid var(--blue3); transition: all .15s;
+}
+#dl-btn:hover:not(:disabled) { border-color: var(--blue2); box-shadow: 0 0 12px #0ac8b955; }
+#dl-btn:disabled { opacity: .85; cursor: progress; }
+.dl-track { position: absolute; left: 0; right: 0; bottom: -6px; height: 2px; background: var(--panel); }
+#dl-bar { height: 100%; width: 0; background: var(--blue2); box-shadow: 0 0 6px var(--blue2); transition: width .2s; }
+#banner a { color: var(--blue2); }
