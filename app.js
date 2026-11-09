@@ -655,9 +655,13 @@ function sectionUrls(section) {
   return [...urls];
 }
 
+const isAdmin = () => Account.mode === "user" && (window.ADMIN_UIDS || []).includes(Account.user.uid);
+
 function updateDlButton() {
   const section = prefs.mode;
   const btn = $("dl-btn");
+  // bouton réservé aux comptes administrateurs (sauf en local sur le PC)
+  $("dl").classList.toggle("hidden", Account.mode !== "local" && !isAdmin());
   if (downloading) return;
   $("dl-bar").parentElement.classList.add("hidden");
   if (!canCache()) {
@@ -741,7 +745,11 @@ function renderAccount() {
   }
   const u = Account.user;
   box.innerHTML = `<div class="acc-user">${u.photoURL ? `<img src="${u.photoURL}" alt="">` : ""}<span></span>
+    <button id="acc-id" class="link" title="Copier mon identifiant de compte">ID</button>
     <button id="acc-logout" class="link">Déconnexion</button></div>`;
+  $("acc-id").onclick = () => {
+    navigator.clipboard.writeText(u.uid).then(() => { $("acc-id").textContent = "ID copié ✓"; }, () => prompt("Ton identifiant :", u.uid));
+  };
   box.querySelector("span").textContent = u.displayName || u.email || "Connecté";
   $("acc-logout").onclick = () => Account.signOut();
 }
@@ -768,6 +776,7 @@ async function onAccountChange(mode) {
   }
   lastMode = mode;
   renderAccount();
+  updateDlButton();
   if (cards.champ.length) rebuild();
 }
 document.addEventListener("click", () => { const m = document.getElementById("acc-menu"); if (m) m.classList.add("hidden"); });
