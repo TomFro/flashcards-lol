@@ -16,6 +16,7 @@ const Master = (() => {
   // skins : jamais dans les packs normaux. Un pack sur 10 est spécial (6e carte = un skin), et on peut en acheter en or.
   const SPECIAL_EVERY = 10, SKIN_PRICE = 200;
   const SKIN_ODDS = [60, 28, 9, 2.5, 0.5];      // chances de rareté pour chaque skin tiré
+  const SKIN_IN_PACK = 0.05;                    // % de chances qu'une carte d'un pack normal soit un skin (4 fois moins qu'une Mythique)
   // part de chaque type dans un pack : peu d'objets et de runes, car chaque exemplaire ne sert qu'à un perso
   const MIX = { champ: 33, spell: 57, item: 6, rune: 4 };
   // Pourquoi une carte a sa rareté (affiché sur la carte en grand)
@@ -193,7 +194,12 @@ const Master = (() => {
     for (let i = 0; i < PACK_SIZE; i++) rs.push(rollRarity(0)); // chaque carte est tirée indépendamment
     if (Math.max(...rs) < 3 && s.pity.l + 1 >= PITY_LEG) rs[PACK_SIZE - 1] = rollRarity(3);
     const taken = new Set();
-    const out = rs.map((r) => { const c = pickCard(pickWeighted(w), r, taken); if (c) taken.add(c.id); return c; }).filter(Boolean);
+    const out = rs.map((r) => {
+      const surprise = rand() * 100 < SKIN_IN_PACK; // très rarement, un skin à la place d'une carte normale
+      const c = surprise ? pickCard("skin", rollRarity(0, SKIN_ODDS), taken) : pickCard(pickWeighted(w), r, taken);
+      if (c) taken.add(c.id);
+      return c;
+    }).filter(Boolean);
     const top = Math.max(...out.map((c) => c.r));
     s.pity.l = top >= 3 ? 0 : s.pity.l + 1;
     if (special) { const k = pickCard("skin", rollRarity(0, SKIN_ODDS), taken); if (k) out.push(k); }
@@ -1112,13 +1118,13 @@ const Master = (() => {
     $("m-grid").onclick = (e) => { const el = e.target.closest(".mc"); if (el) view(el.dataset.id); };
     $("m-view").onclick = (e) => { if (!e.target.closest("details")) $("m-view").classList.add("hidden"); };
     $("m-odds").innerHTML = RAR.map((r, i) => `<span class="r-${r}">${RAR_FR[r]} ${pct(ODDS[i])}</span>`).join("")
-      + `<em>Chances pour chaque carte d'un pack (5 cartes). Si tu n'as eu aucune Légendaire en ${PITY_LEG} packs, la suivante est garantie. Un pack sur ${SPECIAL_EVERY} est spécial : il a un skin en 6e carte.</em>`
+      + `<em>Chances pour chaque carte d'un pack (5 cartes). Si tu n'as eu aucune Légendaire en ${PITY_LEG} packs, la suivante est garantie. Un pack sur ${SPECIAL_EVERY} est spécial : il a un skin en 6e carte. Et chaque carte a ${pct(SKIN_IN_PACK)} de chances d'être un skin surprise.</em>`
       + `<details><summary>Comment sont choisies les raretés ?</summary><ul>
         <li><b>Champions</b> : selon leur taux de pick en Challenger (${ST.source.champ}). Plus un champion est joué, plus il est rare.</li>
         <li><b>Sorts</b> : la rareté de leur champion. L'ultime au même niveau (au moins Rare), A Z E un cran en dessous, le passif deux crans en dessous.</li>
         <li><b>Objets</b> : selon leur taux d'achat (${ST.source.item}, pas de filtre Challenger disponible). Composants Rares. Bottes Légendaires si très achetées, sinon Épiques ; bottes T3 un cran au-dessus. Tout est un cran plus rare que le taux d'achat seul, car un exemplaire suffit pour un build.</li>
         <li><b>Runes</b> : selon leur taux de choix (${ST.source.rune}), runes principales et secondaires classées à part, puis un cran plus rares (un exemplaire suffit pour un build).</li>
-        <li><b>Skins</b> : jamais dans les packs normaux, seulement dans le pack spécial (1 sur ${SPECIAL_EVERY}) ou achetés ${SKIN_PRICE} or. Rareté selon la catégorie de prix de Riot : Commune jusqu'à 975 RP, Rare 1350 RP, Épique 1820 RP, Légendaire Prestige et Mythiques, Mythique Ultimes et Transcendants. Chances pour chaque skin : ${RAR.map((r, i) => `${RAR_FR[r]} ${pct(SKIN_ODDS[i])}`).join(", ")}.</li>
+        <li><b>Skins</b> : dans le pack spécial (1 sur ${SPECIAL_EVERY}), achetés ${SKIN_PRICE} or, ou très rarement en surprise dans un pack normal (${pct(SKIN_IN_PACK)} par carte, 4 fois moins qu'une Mythique). Rareté selon la catégorie de prix de Riot : Commune jusqu'à 975 RP, Rare 1350 RP, Épique 1820 RP, Légendaire Prestige et Mythiques, Mythique Ultimes et Transcendants. Chances pour chaque skin : ${RAR.map((r, i) => `${RAR_FR[r]} ${pct(SKIN_ODDS[i])}`).join(", ")}.</li>
         <li>Touche une carte de ta collection pour voir sa stat.</li></ul></details>`;
     document.addEventListener("keydown", (e) => {
       if (prefs.mode !== "master" || e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
