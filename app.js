@@ -125,7 +125,7 @@ async function load() {
         short: d[s.key] || shorten(official), img: url.loading(c.id),
       };
       cards.champ.push({ ...base, id: `${c.id}_${s.key}` });
-      cards.video.push({
+      if (s.key !== "P") cards.video.push({ // pas de passif en vidéo : seulement les vrais sorts
         ...base, type: "video", id: `vid_${c.id}_${s.key}`,
         videos: [local && url.videoLocal(vkey, s.key), url.videoOnline(vkey, s.key)].filter(Boolean),
       });

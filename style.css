@@ -380,3 +380,4 @@ body.all-mode .key-group { display: none !important; }
   #dl { align-items: center; }
   #dl-status { text-align: center; }
 }
+.mode-video .keys button:first-child { display: none; }
