@@ -122,7 +122,10 @@
 </main>
 
 <section id="master">
-  <div id="m-tabs"><button data-t="cards">Packs et collection</button><button data-t="team">Équipe</button></div>
+  <div id="m-tabs">
+    <button data-t="cards"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 5l9-2 2 15-9 2zM15.5 4.5l4.5 1.5-3 14-1.2-.4z" opacity=".55"/><path d="M4 5l9-2 2 15-9 2z"/></svg><span><b>Packs et collection</b><em>Ouvre des packs, trouve tes cartes</em></span></button>
+    <button data-t="team"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z" opacity=".55"/><path d="M12 6l1.8 3.7 4 .6-2.9 2.8.7 4L12 15.2 8.4 17.1l.7-4-2.9-2.8 4-.6z"/></svg><span><b>Équipe</b><em>Tes 5 champions, leurs builds et leurs stats</em></span></button>
+  </div>
   <div class="m-top">
     <div class="m-packs">
       <div class="m-pack-art"><div class="m-pack-logo">LoL<br>Master</div><b id="m-count">0</b></div>
@@ -163,7 +166,11 @@
         <option value="recent">Les plus récentes</option>
       </select>
     </div>
-    <div class="m-frow"><div class="chips" id="m-ftype"></div><div class="chips" id="m-frar"></div><div class="chips" id="m-fown"></div></div>
+    <div class="m-fgroups">
+      <div class="m-fgroup"><h3>Type</h3><div class="chips" id="m-ftype"></div></div>
+      <div class="m-fgroup"><h3>Rareté</h3><div class="chips" id="m-frar"></div></div>
+      <div class="m-fgroup"><h3>Mes cartes</h3><div class="chips" id="m-fown"></div></div>
+    </div>
   </div>
   <div id="m-grid"></div>
   <button id="m-more" class="btn good hidden"></button>

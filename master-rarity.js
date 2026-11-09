@@ -18,10 +18,12 @@ window.MASTER_RARITY = {
     epic: "Akali Aphelios Alistar Ambessa Braum Caitlyn Camille Corki Draven Gnar Gragas Graves Hwei Irelia Jayce JarvanIV Jhin Karma Kayn Khazix Kindred Leblanc Lucian Lux Maokai Nidalee Poppy Rell Renekton Riven Rumble Sejuani Senna Smolder Syndra Vayne Vi Viktor Xayah XinZhao Zeri Ashe MissFortune Darius Renata Skarner Leona Malphite",
     rare: "Aatrox Akshan Annie AurelionSol Bard Belveth Blitzcrank Brand Briar Cassiopeia Diana Ekko Elise Evelynn Fiora Fizz Galio Gangplank Garen Gwen Hecarim Katarina Kennen Kled Lillia Lissandra Lulu MasterYi Mel Milio Mordekaiser Morgana Nami Neeko Nilah Ornn Pantheon Pyke Qiyana Samira Sett Shen Sivir Talon Tristana Twitch TwistedFate Udyr Vex Vladimir Volibear MonkeyKing Yuumi Zac Zilean Zyra Seraphine Soraka Swain Naafiri Shaco Kassadin",
   },
-  // Sorts (champion_touche) : impact sur les combats et célébrité du sort
+  // Sorts (champion_touche) : pas de statistique publique par sort, donc c'est un jugement :
+  // Mythique = les ultimes et sorts qui retournent un combat d'équipe et que tout joueur connaît,
+  // Légendaire = sorts qui décident souvent d'une partie, Épique = sorts marquants du champion.
   spell: {
-    mythic: "LeeSin_R Azir_R Orianna_R Thresh_Q Malphite_R Yasuo_R",
-    legendary: "Amumu_R Galio_R Shen_R TwistedFate_R Zed_R Ashe_R Kalista_R Sejuani_R Rell_R Jinx_R Ezreal_R Karthus_R Soraka_R Kindred_R Zilean_R Bard_R Taric_R Blitzcrank_Q Nautilus_R Fiddlesticks_R Ornn_R Kennen_R Leona_R Lux_R Sylas_R Viego_P Pyke_R Annie_R Jhin_R Draven_Q Kaisa_P Ahri_R Rakan_W Alistar_W Gragas_E Vi_R Malzahar_R MonkeyKing_R Gangplank_R Janna_R Lissandra_R Seraphine_R Nami_R Sona_R Varus_R Xerath_R Yone_R KSante_R Tryndamere_R Kayle_R Zac_E Hecarim_R",
+    mythic: "LeeSin_R Malphite_R Orianna_R Amumu_R Thresh_Q Yasuo_R",
+    legendary: "Azir_R Galio_R Shen_R TwistedFate_R Zed_R Ashe_R Kalista_R Sejuani_R Rell_R Jinx_R Ezreal_R Karthus_R Soraka_R Kindred_R Zilean_R Bard_R Taric_R Blitzcrank_Q Nautilus_R Fiddlesticks_R Ornn_R Kennen_R Leona_R Lux_R Sylas_R Viego_P Pyke_R Annie_R Jhin_R Draven_Q Kaisa_P Ahri_R Rakan_W Alistar_W Gragas_E Vi_R Malzahar_R MonkeyKing_R Gangplank_R Janna_R Lissandra_R Seraphine_R Nami_R Sona_R Varus_R Xerath_R Yone_R KSante_R Tryndamere_R Kayle_R Zac_E Hecarim_R",
     epic: "Akali_R Akali_W Ahri_E Annie_P Brand_P Braum_E Caitlyn_W Camille_R Diana_R Ekko_R Elise_E Evelynn_R Ezreal_Q Fiora_R Fizz_R Garen_R Gnar_R Gwen_W Irelia_E Jax_E Jayce_R Kassadin_R Katarina_R Kayn_R Khazix_P LeeSin_Q Leblanc_W Lucian_E Lulu_W Lulu_R MasterYi_Q Mordekaiser_R Morgana_E Morgana_Q Nidalee_Q Olaf_R Poppy_E Rammus_Q Renekton_W Riven_Q Samira_R Sett_R Singed_Q Sion_R Swain_R Syndra_R Talon_R Teemo_R Thresh_W Tristana_E Twitch_Q Vayne_Q Vayne_E Veigar_E Velkoz_R Viktor_W Vladimir_W Warwick_R Xayah_R Yuumi_P Zed_W Zyra_R Yasuo_W Azir_W Orianna_W Nautilus_Q Rakan_E Kalista_P Jax_R Lux_Q Morgana_R Yunara_R Aurora_R Taliyah_R Viego_R Kaisa_R Malphite_Q Sejuani_E Zilean_E Janna_Q Bard_Q",
   },
   // Objets (identifiant Data Dragon) : à quel point ils sont achetés
