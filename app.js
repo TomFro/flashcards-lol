@@ -253,6 +253,8 @@ function buildFilters() {
   $("o-icon").onchange = (e) => { prefs.icon = e.target.checked; store.set("flc_prefs", prefs); show(); };
   $("o-review").onchange = (e) => { prefs.review = e.target.checked; saveAndRebuild(); };
   $("f-search").oninput = () => rebuild();
+  // Entrée : quitte la recherche pour pouvoir utiliser les touches P A Z E R tout de suite
+  $("f-search").onkeydown = (e) => { if (e.key === "Enter" || e.key === "Escape") e.target.blur(); };
   document.querySelectorAll("#modes button").forEach((b) => {
     b.classList.toggle("on", b.dataset.mode === prefs.mode);
     b.onclick = () => {
@@ -408,24 +410,37 @@ function renderStudy() {
   const champs = [...new Set(deck.map((c) => c.champId))];
   box.innerHTML = champs.length > STUDY_MAX
     ? `<div class="study-note">${champs.length} champions correspondent : voici les ${STUDY_MAX} premiers, précise la recherche pour en voir un autre.</div>` : "";
+  box.insertAdjacentHTML("beforeend", `<div class="study-note">Maintiens <b>A Z E R</b> pour retourner un sort, <b>P</b> pour le détail du passif (ou clique / touche-les)</div>`);
   for (const id of champs.slice(0, STUDY_MAX)) {
     const list = deck.filter((c) => c.champId === id);
+    const raw = champRaw[id];
     const sec = document.createElement("section");
     sec.className = "study-champ";
-    sec.innerHTML = `<h2><img src="${list[0].img}" alt=""><span></span></h2><div class="study-grid"></div>`;
+    sec.innerHTML = `<h2><img src="${list[0].img}" alt=""><span></span></h2>
+      <div class="study-passive" data-k="P"><div class="key"><b>P</b></div><img src="${url.passive(raw.passive.image.full)}" alt="">
+        <div class="sp-text"><b></b><span></span><p class="study-official"></p></div></div>
+      <div class="study-grid"></div>`;
     sec.querySelector("h2 span").textContent = list[0].champ;
+    sec.querySelector(".sp-text b").textContent = `Passif · ${raw.passive.name}`;
+    sec.querySelector(".sp-text span").textContent = custom[`${id}_P`] || (window.CHAMP_DESC[id] || {}).P || shorten(clean(raw.passive.description));
+    sec.querySelector(".sp-text .study-official").textContent = clean(raw.passive.description);
+    sec.querySelector(".study-passive").onclick = (e) => e.currentTarget.classList.toggle("open");
     for (const c of list) {
       const tile = document.createElement("article");
       tile.className = "study-tile";
-      tile.innerHTML = `<div class="study-video"><video muted loop playsinline autoplay preload="metadata"></video>
-          <div class="key"><b></b></div><em class="study-missing hidden">Vidéo indisponible</em></div>
-        <div class="study-text"><div class="study-head"><img src="${c.icon}" alt=""><b></b></div>
+      tile.dataset.k = c.key;
+      tile.innerHTML = `<div class="st-inner">
+        <div class="st-front"><video muted loop playsinline autoplay preload="metadata"></video>
+          <div class="key"><b></b></div><em class="study-missing hidden">Vidéo indisponible</em><div class="st-name"></div></div>
+        <div class="st-back"><div class="study-head"><div class="key"><b></b></div><img src="${c.icon}" alt=""><b class="st-title"></b></div>
           <p class="study-short"></p>${c.cd && c.cd.length ? `<div class="study-cd">CD ${c.cd.join(" / ")} s</div>` : ""}
-          <p class="study-official"></p></div>`;
-      tile.querySelector(".key b").textContent = c.key;
-      tile.querySelector(".study-head b").textContent = c.name;
+          <p class="study-official"></p></div></div>`;
+      tile.querySelectorAll(".key b").forEach((b) => (b.textContent = AZERTY[c.key] || c.key));
+      tile.querySelector(".st-name").textContent = c.name;
+      tile.querySelector(".st-title").textContent = c.name;
       tile.querySelector(".study-short").textContent = custom[c.id.replace(/^vid_/, "")] || c.short;
       tile.querySelector(".study-official").textContent = c.official;
+      tile.onclick = () => tile.classList.toggle("flipped"); // au toucher : retourne / remet la carte
       const v = tile.querySelector("video");
       let i = 0;
       v.onerror = () => {
@@ -439,6 +454,11 @@ function renderStudy() {
     }
     box.appendChild(sec);
   }
+}
+// Mode étude : maintenir P A Z E R retourne la carte du sort (ou ouvre le passif), relâcher la remet
+function studyKey(k, down) {
+  const sel = k === "P" ? `.study-passive[data-k="P"]` : `.study-tile[data-k="${k}"]`;
+  document.querySelectorAll(`#study ${sel}`).forEach((el) => el.classList.toggle(k === "P" ? "open" : "flipped", down));
 }
 
 function next(step = 1) {
@@ -808,6 +828,10 @@ function wire() {
   };
   document.addEventListener("keydown", (e) => {
     if (e.target.tagName === "INPUT") return;
+    if (studyMode() && KEY_FROM_PRESS[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (!e.repeat) studyKey(KEY_FROM_PRESS[e.key.toLowerCase()], true);
+      return;
+    }
     if (isDetail() && ["Space", "Enter"].includes(e.code)) { e.preventDefault(); closeDetail(); return; }
     if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); flip(); }
     // chiffres 1 à 4 (rangée du haut sans Maj sur AZERTY, ou pavé numérique) ; flèches = À revoir / Bien
@@ -822,9 +846,13 @@ function wire() {
   });
   document.addEventListener("keyup", (e) => {
     const k = KEY_FROM_PRESS[(e.key || "").toLowerCase()];
+    if (k && studyMode()) return studyKey(k, false);
     if (k && isDetail() && $("detail").dataset.k === k) closeDetail();
   });
-  window.addEventListener("blur", () => { if (isDetail()) closeDetail(); });
+  window.addEventListener("blur", () => {
+    if (isDetail()) closeDetail();
+    document.querySelectorAll("#study .flipped, #study .open").forEach((el) => el.classList.remove("flipped", "open"));
+  });
 }
 
 // ---------- Téléchargement par section (hors ligne dans le navigateur) ----------
