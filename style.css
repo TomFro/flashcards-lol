@@ -891,3 +891,11 @@ body.mode-master .stage, body.mode-master #filters, body.mode-master #dl, body.m
 #m-sound { position: absolute; top: 14px; right: 14px; padding: 6px 12px; border-radius: 999px; cursor: pointer;
   background: var(--panel); border: 1px solid var(--gold4); color: var(--gold2); font: 13px var(--text); }
 #m-sound:hover { color: var(--gold1); border-color: var(--gold2); }
+
+/* skins */
+#m-special { font-size: 13px; color: var(--gold2); }
+.m-pack-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+#m-skin { border-color: var(--gold4); background: var(--panel); color: var(--gold1); }
+#m-skin:disabled { opacity: .45; cursor: default; }
+.m-rbar.skins { --rc: #e07ab8; }
+button.link.tm-skin { font-size: 12px; text-align: left; padding: 2px 0; margin: 4px 0 0; color: var(--gold2); }

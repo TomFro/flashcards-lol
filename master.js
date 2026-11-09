@@ -11,8 +11,11 @@ const Master = (() => {
   const RECYCLE = [5, 15, 60, 250, 1000];       // or rendu en recyclant un double, selon la rareté
   const V = 2;                                  // changer ce numéro remet toutes les collections à zéro
   const PITY_LEG = 50;                          // au pire, une Légendaire (ou mieux) tous les 50 packs
-  const TYPES = { champ: "Champion", spell: "Sort", item: "Objet", rune: "Rune" };
-  const TYPES_PL = { champ: "Champions", spell: "Sorts", item: "Objets", rune: "Runes" };
+  const TYPES = { champ: "Champion", spell: "Sort", item: "Objet", rune: "Rune", skin: "Skin" };
+  const TYPES_PL = { champ: "Champions", spell: "Sorts", item: "Objets", rune: "Runes", skin: "Skins" };
+  // skins : jamais dans les packs normaux. Un pack sur 10 est spécial (6e carte = un skin), et on peut en acheter en or.
+  const SPECIAL_EVERY = 10, SKIN_PRICE = 200;
+  const SKIN_ODDS = [60, 28, 9, 2.5, 0.5];      // chances de rareté pour chaque skin tiré
   // part de chaque type dans un pack : peu d'objets et de runes, car chaque exemplaire ne sert qu'à un perso
   const MIX = { champ: 33, spell: 57, item: 6, rune: 4 };
   // Pourquoi une carte a sa rareté (affiché sur la carte en grand)
@@ -27,6 +30,29 @@ const Master = (() => {
   const ui = { type: [], rar: [], own: "all", q: "", sort: "rarity", shown: PAGE, tab: "cards" };
   Object.assign(ui, store.get("flc_master_ui", {}), { shown: PAGE, q: "" });
   let opening = null, timer = null;
+
+  // ---------- Raretés des skins ----------
+  // Rareté d'un skin = sa catégorie de prix chez Riot, lue dans skins.json de CommunityDragon (gardé une semaine dans le navigateur)
+  const CDRAGON_SKINS = "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/skins.json";
+  const SKIN_TIER = { kNoRarity: 0, kRare: 1, kEpic: 1, kLegendary: 2, kMythic: 3, kUltimate: 4, kTranscendent: 4, kExalted: 4 };
+  const SKIN_TIER_FR = ["skin à 975 RP ou moins", "skin à 1350 RP", "skin Légendaire (1820 RP)", "skin Prestige ou Mythique", "skin Ultime, Transcendant ou Exalté"];
+  let skinTiers = store.get("flc_skin_tiers", null), skinLoad = false;
+  async function loadSkinTiers() {
+    if (skinLoad) return;
+    skinLoad = true;
+    if (skinTiers && Date.now() - skinTiers.t < 7 * 864e5) return;
+    try {
+      const res = await fetch(CDRAGON_SKINS);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const map = {};
+      for (const k of Object.values(data)) if (k && k.id != null && !k.isBase) map[k.id] = SKIN_TIER[k.rarity] ?? 0;
+      skinTiers = { t: Date.now(), map };
+      store.set("flc_skin_tiers", skinTiers);
+      pool = null; byId = {}; byTypeRar = {}; // on recalcule les raretés avec les vraies catégories
+      if (prefs.mode === "master" && !opening) render();
+    } catch (e) { console.warn("Raretés des skins indisponibles, rangées d'après leur nom", e); }
+  }
 
   // ---------- Raretés ----------
   // Rareté à partir des stats (master-rarity.js) : la plus haute rareté dont la carte atteint le seuil
@@ -56,6 +82,19 @@ const Master = (() => {
         spells: c.spells,
         why: pr ? `Joué dans ${num(pr)} % des parties Challenger (${nth(champRank[c.champId])} champion le plus joué)` : "Presque jamais joué en Challenger",
       });
+    }
+    for (const c of cards.champAll) {
+      const raw = champRaw[c.champId];
+      for (const k of (raw && raw.skins) || []) {
+        if (!k.num) continue; // skin de base
+        const known = skinTiers && skinTiers.map ? skinTiers.map[k.id] : undefined;
+        const r = known ?? (/prestige/i.test(k.name) ? 3 : 0);
+        pool.push({
+          id: `k_${c.champId}_${k.num}`, type: "skin", r, name: k.name, sub: c.champ, champ: c.champ, champId: c.champId, num: k.num,
+          art: `${DD}/cdn/img/champion/loading/${c.champId}_${k.num}.jpg`, desc: "",
+          why: known != null ? `Catégorie de Riot : ${SKIN_TIER_FR[r]}` : "Catégorie de Riot pas encore chargée : rangé d'après son nom",
+        });
+      }
     }
     const STEP = { R: 0, Q: 1, W: 1, E: 1, P: 2 };
     for (const c of cards.champ) {
@@ -131,9 +170,9 @@ const Master = (() => {
     for (const [k, v] of entries) { if ((x -= v) < 0) return k; }
     return entries[entries.length - 1][0];
   }
-  function rollRarity(min) {
+  function rollRarity(min, odds = ODDS) {
     const w = {};
-    ODDS.forEach((p, i) => { if (i >= min) w[i] = p; });
+    odds.forEach((p, i) => { if (i >= min) w[i] = p; });
     return +pickWeighted(w);
   }
   // Une carte de ce type et de cette rareté ; si le type n'en a pas, on prend la rareté la plus proche
@@ -148,7 +187,7 @@ const Master = (() => {
     return null;
   }
 
-  function makePack() {
+  function makePack(special) {
     const w = MIX;
     const rs = [];
     for (let i = 0; i < PACK_SIZE; i++) rs.push(rollRarity(0)); // chaque carte est tirée indépendamment
@@ -157,7 +196,29 @@ const Master = (() => {
     const out = rs.map((r) => { const c = pickCard(pickWeighted(w), r, taken); if (c) taken.add(c.id); return c; }).filter(Boolean);
     const top = Math.max(...out.map((c) => c.r));
     s.pity.l = top >= 3 ? 0 : s.pity.l + 1;
+    if (special) { const k = pickCard("skin", rollRarity(0, SKIN_ODDS), taken); if (k) out.push(k); }
     return out;
+  }
+  // ajoute les cartes à la collection, et les montre de la moins rare à la plus rare (le skin toujours en dernier)
+  function receive(got, title) {
+    const now = Math.floor(Date.now() / 60e3);
+    const res = got.map((c) => {
+      const before = s.inv[c.id] || 0;
+      s.inv[c.id] = before + 1;
+      if (!before) s.at[c.id] = now;
+      return { c, isNew: !before, n: before + 1 };
+    });
+    res.sort((a, b) => (a.c.type === "skin") - (b.c.type === "skin") || a.c.r - b.c.r);
+    save();
+    showOpening(res, title);
+  }
+  function buySkin() {
+    build();
+    if (!pool || (s.gold || 0) < SKIN_PRICE) return;
+    const k = pickCard("skin", rollRarity(0, SKIN_ODDS), new Set());
+    if (!k) return;
+    s.gold -= SKIN_PRICE;
+    receive([k], "Skin acheté !");
   }
 
   function openPack() {
@@ -167,18 +228,8 @@ const Master = (() => {
     if (s.packs === CAP - 1) s.t = Date.now(); // le compteur repart quand on passe sous le maximum
     s.opened++;
     s.gold = (s.gold || 0) + GOLD_PACK;
-    const got = makePack();
-    const now = Math.floor(Date.now() / 60e3);
-    const res = got.map((c) => {
-      const before = s.inv[c.id] || 0;
-      s.inv[c.id] = before + 1;
-      if (!before) s.at[c.id] = now;
-      return { c, isNew: !before, n: before + 1 };
-    });
-    // les cartes les plus rares à la fin, pour le suspense
-    res.sort((a, b) => a.c.r - b.c.r);
-    save();
-    showOpening(res);
+    const special = s.opened % SPECIAL_EVERY === 0;
+    receive(makePack(special), special ? "Pack spécial : la dernière carte est un skin !" : "");
   }
 
   // ---------- Enregistrement ----------
@@ -205,7 +256,7 @@ const Master = (() => {
 
   function cardHtml(c, { n = 0, back = false, big = false, isNew = false } = {}) {
     const missing = n === 0 && !back && !isNew;
-    const art = c.type === "champ"
+    const art = c.type === "champ" || c.type === "skin"
       ? `<img class="mc-champ" src="${c.art}" alt="" loading="lazy">`
       : `${c.art ? `<img class="mc-blur" src="${c.art}" alt="" loading="lazy">` : ""}<img class="mc-icon" src="${c.icon}" alt="" loading="lazy">`;
     const keyBadge = c.type === "spell" ? `<div class="key mc-key"><b>${c.key === "P" ? "P" : AZERTY[c.key]}</b></div>` : "";
@@ -258,19 +309,25 @@ const Master = (() => {
       $("m-timer").textContent = `+${PER} packs dans ${m}:${String(sec).padStart(2, "0")}`;
     }
     $("m-guest").classList.toggle("hidden", !isGuest());
+    const left = SPECIAL_EVERY - (s.opened % SPECIAL_EVERY);
+    $("m-special").textContent = (left === 1 ? "Le prochain pack est spécial : 6 cartes dont un skin !" : `Pack spécial avec un skin dans ${left} packs`) + ` · ${s.gold || 0} or`;
+    $("m-skin").textContent = `Acheter un skin (${SKIN_PRICE} or)`;
+    $("m-skin").disabled = (s.gold || 0) < SKIN_PRICE;
   }
 
   function renderProgress() {
-    const owned = pool.filter((c) => s.inv[c.id]).length;
-    let html = `<div class="m-total"><b>${owned}</b> / ${pool.length} cartes · ${s.opened} pack${s.opened > 1 ? "s" : ""} ouvert${s.opened > 1 ? "s" : ""}</div>`;
+    const base = pool.filter((c) => c.type !== "skin"), skins = pool.filter((c) => c.type === "skin");
+    const owned = base.filter((c) => s.inv[c.id]).length, ownedSkins = skins.filter((c) => s.inv[c.id]).length;
+    let html = `<div class="m-total"><b>${owned}</b> / ${base.length} cartes · ${s.opened} pack${s.opened > 1 ? "s" : ""} ouvert${s.opened > 1 ? "s" : ""}</div>`;
     for (let r = RAR.length - 1; r >= 0; r--) {
-      const all = pool.filter((c) => c.r === r);
+      const all = base.filter((c) => c.r === r);
       const have = all.filter((c) => s.inv[c.id]).length;
       html += `<div class="m-rbar r-${RAR[r]}"><span>${RAR_FR[RAR[r]]}</span><div class="bar"><i style="width:${all.length ? (100 * have) / all.length : 0}%"></i></div><em>${have}/${all.length}</em></div>`;
     }
+    html += `<div class="m-rbar skins"><span>Skins</span><div class="bar"><i style="width:${skins.length ? (100 * ownedSkins) / skins.length : 0}%"></i></div><em>${ownedSkins}/${skins.length}</em></div>`;
     $("m-progress").innerHTML = html;
-    $("stats").innerHTML = `<b>${owned}</b> / ${pool.length} cartes collectionnées`;
-    $("stats-bar").style.width = `${(100 * owned) / pool.length}%`;
+    $("stats").innerHTML = `<b>${owned}</b> / ${base.length} cartes collectionnées`;
+    $("stats-bar").style.width = `${(100 * owned) / base.length}%`;
   }
 
   function renderFilters() {
@@ -317,6 +374,7 @@ const Master = (() => {
 
   function render() {
     build();
+    loadSkinTiers();
     if (!pool) return;
     tick();
     document.querySelectorAll("#m-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.t === ui.tab));
@@ -374,8 +432,10 @@ const Master = (() => {
   }
 
   // ---------- Ouverture ----------
-  function showOpening(res) {
+  let openTitle = "";
+  function showOpening(res, title = "") {
     opening = res;
+    openTitle = title;
     const box = $("m-opening");
     box.classList.remove("hidden");
     $("m-reveal").innerHTML = res.map((x, i) =>
@@ -403,7 +463,7 @@ const Master = (() => {
     if (hidden === 0) {
       const nNew = opening.filter((x) => x.isNew).length;
       $("m-summary").textContent = nNew ? `${nNew} nouvelle${nNew > 1 ? "s" : ""} carte${nNew > 1 ? "s" : ""} !` : "Que des doubles cette fois.";
-    } else $("m-summary").textContent = "Touche les cartes pour les retourner";
+    } else $("m-summary").textContent = openTitle || "Touche les cartes pour les retourner";
   }
   function revealAll() {
     $("m-reveal").querySelectorAll(".m-slot:not(.shown)").forEach((el, i) => setTimeout(() => {
@@ -524,6 +584,8 @@ const Master = (() => {
         return `<div class="tm-role empty">${head}<button class="tm-pick btn good" data-role="${role}">+ Choisir un champion</button></div>`;
       }
       const c = byId[`c_${t.c}`];
+      const sk = skinOf(t, s.inv);
+      const mySkins = pool.filter((x) => x.type === "skin" && x.champId === t.c && s.inv[x.id]).length;
       const { lvl, cap } = champLevel(t.c, role);
       total += lvl;
       const spells = "PQWER".split("").map((k) => {
@@ -549,8 +611,9 @@ const Master = (() => {
       }).join("");
       const next = lvl >= cap ? "Niveau max" : "Prochain niveau : 1 carte d'un de ses sorts, ou un double";
       return `<div class="tm-role r-${RAR[c.r]}">${head}
-        <div class="tm-champ" data-role="${role}" title="Changer de champion"><img src="${c.art}" alt=""><div class="tm-lvl">${lvl}</div>
+        <div class="tm-champ" data-role="${role}" title="Changer de champion"><img src="${sk ? sk.art : c.art}" alt=""><div class="tm-lvl">${lvl}</div>
           <div class="tm-cname"><b>${esc(c.name)}</b><span>Niveau ${lvl} / ${cap}</span></div></div>
+        ${mySkins ? `<button class="link tm-skin" data-role="${role}">🎨 ${sk ? esc(sk.name) : "Skin de base"} · changer (${mySkins} skin${mySkins > 1 ? "s" : ""})</button>` : ""}
         <div class="tm-next">${next}</div>
         <div class="tm-spells">${spells}</div>
         <h4>Objets</h4><div class="tm-items">${items}</div>
@@ -561,7 +624,18 @@ const Master = (() => {
     $("m-team-grid").innerHTML = html;
     $("m-team-total").textContent = `Niveau total de l'équipe : ${total}`;
     $("m-team-grid").querySelectorAll(".tm-pick, .tm-champ").forEach((el) => (el.onclick = () => pickChamp(el.dataset.role)));
+    $("m-team-grid").querySelectorAll(".tm-skin").forEach((el) => (el.onclick = () => pickSkin(el.dataset.role)));
     $("m-team-grid").querySelectorAll(".tm-slot").forEach((el) => (el.onclick = () => pickGear(el.dataset.role, el.dataset.kind, +el.dataset.i)));
+  }
+
+  // skin équipé sur le champion d'un poste (purement visuel), s'il est toujours possédé
+  const skinOf = (t, inv) => (t && t.sk && t.c && t.sk.startsWith(`k_${t.c}_`) && inv[t.sk] ? byId[t.sk] : null);
+  function pickSkin(role) {
+    const t = slot(role);
+    const opts = pool.filter((x) => x.type === "skin" && x.champId === t.c && s.inv[x.id])
+      .map((x) => ({ c: x, v: x.id, img: x.art, search: x.name, note: `${RAR_FR[RAR[x.r]]}${t.sk === x.id ? " · équipé" : ""}` }))
+      .sort((a, b) => b.c.r - a.c.r || a.c.name.localeCompare(b.c.name));
+    openPicker(`Skin de ${byId[`c_${t.c}`].name} (✕ = skin de base)`, opts, (id) => { t.sk = id || null; save(); renderTeam(); }, true);
   }
 
   // ---- choix dans une liste ----
@@ -611,6 +685,7 @@ const Master = (() => {
       if (from && from !== role) { // échange de poste entre les deux champions
         const f = slot(from);
         [f.c, t.c] = [t.c, f.c];
+        [f.sk, t.sk] = [t.sk, f.sk];
       } else if (t.c !== id) { t.c = id; }
       save();
       renderTeam();
@@ -693,9 +768,10 @@ const Master = (() => {
     build();
     if (!db || !u || !pool) return;
     const byR = [0, 0, 0, 0, 0];
-    for (const c of pool) if (s.inv[c.id]) byR[c.r]++;
+    const base = pool.filter((c) => c.type !== "skin");
+    for (const c of base) if (s.inv[c.id]) byR[c.r]++;
     db.collection("profiles").doc(u.uid).set({
-      name: u.displayName || "Joueur", photo: u.photoURL || "", owned: byR.reduce((a, b) => a + b, 0), total: pool.length,
+      name: u.displayName || "Joueur", photo: u.photoURL || "", owned: byR.reduce((a, b) => a + b, 0), total: base.length,
       byR, opened: s.opened, inv: s.inv, team: s.team,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }).catch((e) => console.error("Profil public non enregistré", e));
@@ -733,8 +809,9 @@ const Master = (() => {
     const box = $("m-players");
     const inv = p.inv || {};
     const owned = pool.filter((c) => inv[c.id]).sort((a, b) => b.r - a.r || a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
+    const base = pool.filter((c) => c.type !== "skin"), nBase = owned.filter((c) => c.type !== "skin").length, nSkins = owned.length - nBase;
     const bars = RAR.map((r, i) => i).reverse().map((i) => {
-      const all = pool.filter((c) => c.r === i).length, have = owned.filter((c) => c.r === i).length;
+      const all = base.filter((c) => c.r === i).length, have = owned.filter((c) => c.r === i && c.type !== "skin").length;
       return `<div class="m-rbar r-${RAR[i]}"><span>${RAR_FR[RAR[i]]}</span><div class="bar"><i style="width:${all ? (100 * have) / all : 0}%"></i></div><em>${have}/${all}</em></div>`;
     }).join("");
     const team = Object.entries(ROLES).map(([role, R]) => {
@@ -743,13 +820,13 @@ const Master = (() => {
       if (!c) return `<div class="pf-role empty"><div class="tm-rhead">${roleIcon(role)}<b>${R.name}</b></div><em>Vide</em></div>`;
       const icons = [...(t.it || []).map((x) => x && byId[`i_${x}`]), ...(t.ru || []).map((x) => x && byId[`r_${x}`])].filter(Boolean);
       return `<div class="pf-role r-${RAR[c.r]}"><div class="tm-rhead">${roleIcon(role)}<b>${R.name}</b></div>
-        <div class="pf-champ"><img src="${c.art}" alt=""><div class="tm-lvl">${champLevel(t.c, role, inv).lvl}</div><span>${esc(c.name)}</span></div>
+        <div class="pf-champ"><img src="${(skinOf(t, inv) || c).art}" alt=""><div class="tm-lvl">${champLevel(t.c, role, inv).lvl}</div><span>${esc(c.name)}</span></div>
         <div class="pf-gear">${icons.map((x) => `<img class="r-${RAR[x.r]}" src="${x.icon}" title="${esc(x.name)}" alt="">`).join("")}</div></div>`;
     }).join("");
     box.innerHTML = `<div class="m-panel">
         <button class="link pf-back">← Tous les joueurs</button>
         <div class="pf-head">${p.photo ? `<img src="${esc(p.photo)}" alt="" onerror="this.remove()">` : `<i class="m-avatar">${esc((p.name || "?")[0])}</i>`}
-          <div><h2>${esc(p.name)}</h2><em>${owned.length} / ${pool.length} cartes · ${p.opened || 0} packs ouverts</em></div></div>
+          <div><h2>${esc(p.name)}</h2><em>${nBase} / ${base.length} cartes · ${nSkins} skin${nSkins > 1 ? "s" : ""} · ${p.opened || 0} packs ouverts</em></div></div>
         <div class="pf-bars">${bars}</div>
       </div>
       <div class="m-panel"><h2>Équipe</h2><div class="pf-team">${team}</div></div>
@@ -952,7 +1029,7 @@ const Master = (() => {
       <div class="mv-info">
         <div class="mv-own">${n ? `Possédée${n > 1 ? ` en ${n} exemplaires` : ""}` : "Pas encore trouvée"}</div>
         <div class="mv-why"><b class="r-${RAR[c.r]}">${RAR_FR[RAR[c.r]]}</b> : ${esc(c.why)}</div>
-        <div class="mv-chance">${pct(ODDS[c.r])} de chances par carte d'un pack</div>
+        <div class="mv-chance">${c.type === "skin" ? `${pct(SKIN_ODDS[c.r])} de chances qu'un skin tiré soit ${RAR_FR[RAR[c.r]]}` : `${pct(ODDS[c.r])} de chances par carte d'un pack`}</div>
         ${n > 1 && free(id) > 0 && !isGuest() ? `<button class="btn good mv-recycle" data-id="${id}">Recycler un double (+${RECYCLE[c.r]} or)</button>` : ""}
         ${extra}
       </div>`;
@@ -963,6 +1040,7 @@ const Master = (() => {
 
   function wireUi() {
     $("m-open").onclick = openPack;
+    $("m-skin").onclick = buySkin;
     document.querySelectorAll("#m-tabs button").forEach((b) => (b.onclick = () => { ui.tab = b.dataset.t; viewing = null; saveUi(); render(); }));
     $("m-pick").onclick = (e) => { if (e.target.id === "m-pick" || e.target.id === "m-pick-close") closePicker(); };
     $("m-pick-search").onkeydown = (e) => { if (e.key === "Escape") closePicker(); };
@@ -978,12 +1056,13 @@ const Master = (() => {
     $("m-grid").onclick = (e) => { const el = e.target.closest(".mc"); if (el) view(el.dataset.id); };
     $("m-view").onclick = (e) => { if (!e.target.closest("details")) $("m-view").classList.add("hidden"); };
     $("m-odds").innerHTML = RAR.map((r, i) => `<span class="r-${r}">${RAR_FR[r]} ${pct(ODDS[i])}</span>`).join("")
-      + `<em>Chances pour chaque carte d'un pack (5 cartes). Si tu n'as eu aucune Légendaire en ${PITY_LEG} packs, la suivante est garantie.</em>`
+      + `<em>Chances pour chaque carte d'un pack (5 cartes). Si tu n'as eu aucune Légendaire en ${PITY_LEG} packs, la suivante est garantie. Un pack sur ${SPECIAL_EVERY} est spécial : il a un skin en 6e carte.</em>`
       + `<details><summary>Comment sont choisies les raretés ?</summary><ul>
         <li><b>Champions</b> : selon leur taux de pick en Challenger (${ST.source.champ}). Plus un champion est joué, plus il est rare.</li>
         <li><b>Sorts</b> : la rareté de leur champion. L'ultime au même niveau (au moins Rare), A Z E un cran en dessous, le passif deux crans en dessous.</li>
         <li><b>Objets</b> : selon leur taux d'achat (${ST.source.item}, pas de filtre Challenger disponible). Composants Rares. Bottes Légendaires si très achetées, sinon Épiques ; bottes T3 un cran au-dessus. Tout est un cran plus rare que le taux d'achat seul, car un exemplaire suffit pour un build.</li>
         <li><b>Runes</b> : selon leur taux de choix (${ST.source.rune}), runes principales et secondaires classées à part, puis un cran plus rares (un exemplaire suffit pour un build).</li>
+        <li><b>Skins</b> : jamais dans les packs normaux, seulement dans le pack spécial (1 sur ${SPECIAL_EVERY}) ou achetés ${SKIN_PRICE} or. Rareté selon la catégorie de prix de Riot : Commune jusqu'à 975 RP, Rare 1350 RP, Épique 1820 RP, Légendaire Prestige et Mythiques, Mythique Ultimes et Transcendants. Chances pour chaque skin : ${RAR.map((r, i) => `${RAR_FR[r]} ${pct(SKIN_ODDS[i])}`).join(", ")}.</li>
         <li>Touche une carte de ta collection pour voir sa stat.</li></ul></details>`;
     document.addEventListener("keydown", (e) => {
       if (prefs.mode !== "master" || e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
