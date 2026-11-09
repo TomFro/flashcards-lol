@@ -882,3 +882,7 @@ body.mode-master .stage, body.mode-master #filters, body.mode-master #dl, body.m
 #mk-search { flex: 1; min-width: 200px; }
 #mk-search:focus, #mk-sort:focus { outline: none; border-color: var(--gold2); }
 .m-panel .m-frow { margin-top: 12px; }
+#m-pick-lanes { gap: 6px; }
+#m-pick-lanes button { min-width: 0; flex: 1; padding: 6px 4px 5px; }
+#m-pick-lanes button svg { width: 20px; height: 20px; }
+#m-pick-lanes button { justify-content: center; letter-spacing: .5px; font-size: 9.5px; }

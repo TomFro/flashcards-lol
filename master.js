@@ -518,16 +518,28 @@ const Master = (() => {
   }
 
   // ---- choix dans une liste ----
-  function openPicker(title, options, onPick, removable) {
+  // lanes : affiche des filtres par poste (Tous par défaut, quel que soit le poste choisi)
+  function openPicker(title, options, onPick, removable, lanes) {
     $("m-pick-title").textContent = title;
     $("m-pick-search").value = "";
+    let lane = "";
+    const fbox = $("m-pick-lanes");
+    fbox.classList.toggle("hidden", !lanes);
+    if (lanes) {
+      fbox.innerHTML = `<button data-l="" class="on">Tous</button>` + Object.keys(ROLES).map((r) => `<button data-l="${r}">${roleIcon(r)}${ROLES[r].name}</button>`).join("");
+      fbox.querySelectorAll("button").forEach((b) => (b.onclick = () => {
+        lane = b.dataset.l;
+        fbox.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+        draw();
+      }));
+    }
     const draw = () => {
       const q = $("m-pick-search").value.trim().toLowerCase();
-      const list = options.filter((o) => !q || o.search.toLowerCase().includes(q));
+      const list = options.filter((o) => (!q || o.search.toLowerCase().includes(q)) && (!lane || (o.c.lanes || []).includes(lane)));
       $("m-pick-list").innerHTML = (removable ? `<button class="pk pk-remove" data-v="">✕ Retirer</button>` : "")
         + (list.length ? list.map((o) => `<button class="pk r-${RAR[o.c.r]}${o.off ? " off" : ""}" data-v="${o.v}" ${o.off ? "disabled" : ""}>
             <img src="${o.img}" alt=""><span><b>${esc(o.c.name)}</b><em>${esc(o.note)}</em></span></button>`).join("")
-          : `<div class="m-none">Aucune carte disponible. Ouvre des packs pour en trouver !</div>`);
+          : `<div class="m-none">${lane || q ? "Aucune carte avec ces filtres." : "Aucune carte disponible. Ouvre des packs pour en trouver !"}</div>`);
       $("m-pick-list").querySelectorAll(".pk:not(.off)").forEach((b) => (b.onclick = () => { closePicker(); onPick(b.dataset.v || null); }));
     };
     $("m-pick-search").oninput = draw;
@@ -555,7 +567,7 @@ const Master = (() => {
       } else if (t.c !== id) { t.c = id; }
       save();
       renderTeam();
-    }, false);
+    }, false, true);
   }
 
   function pickGear(role, kind, i) {
