@@ -396,13 +396,32 @@ const Master = (() => {
   }
 
   // ---------- Sons ----------
-  // petits sons façon pings, fabriqués dans le navigateur (pas de fichier audio) : plus la carte est rare, plus le son se remarque
-  let actx = null;
+  // les vrais pings du jeu (dossier sons/), du plus discret au plus marquant :
+  // Commune = ping simple, Rare = « ? » (ennemi disparu), Épique = « à l'aide », Légendaire = « danger », Mythique = « all-in »
+  const PING_FILES = ["commune", "rare", "epique", "legendaire", "mythique"];
+  let actx = null, buffers = null;
+  function loadPings() {
+    if (buffers) return;
+    buffers = [];
+    PING_FILES.forEach((f, i) => fetch(`sons/${f}.mp3`).then((r) => r.arrayBuffer())
+      .then((b) => new Promise((ok, ko) => actx.decodeAudioData(b, ok, ko)))
+      .then((buf) => (buffers[i] = buf)).catch(() => {}));
+  }
   function ping(r) {
     if (ui.mute) return;
     try {
       actx ||= new (window.AudioContext || window.webkitAudioContext)();
       if (actx.state === "suspended") actx.resume();
+      loadPings();
+      if (buffers[r]) {
+        const src = actx.createBufferSource(), g = actx.createGain();
+        src.buffer = buffers[r];
+        g.gain.value = 0.6;
+        src.connect(g).connect(actx.destination);
+        src.start();
+        return;
+      }
+      // son pas encore chargé (ou hors ligne) : petit son fabriqué à la place
       const t0 = actx.currentTime + 0.01;
       const out = actx.createGain();
       out.gain.value = 0.25;
@@ -434,6 +453,7 @@ const Master = (() => {
   // ---------- Ouverture ----------
   let openTitle = "";
   function showOpening(res, title = "") {
+    if (!ui.mute) { try { actx ||= new (window.AudioContext || window.webkitAudioContext)(); loadPings(); } catch {} }
     opening = res;
     openTitle = title;
     const box = $("m-opening");
