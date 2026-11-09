@@ -38,6 +38,10 @@
 
 <main class="stage">
   <div id="loading"><div class="spinner"></div>Chargement des données…</div>
+  <div id="learnmode" class="hidden">
+    <button data-m="discover"><b>Découverte</b><em id="lm-new"></em></button>
+    <button data-m="review"><b>Révision</b><em id="lm-due"></em></button>
+  </div>
 
   <div id="card" class="card hidden" tabindex="0">
     <div class="inner">
@@ -113,7 +117,7 @@
     </div>
   </div>
   <div id="study" class="hidden"></div>
-  <div id="empty" class="hidden"><span id="empty-text">Aucune carte avec ces filtres.</span><button id="b-ahead" class="btn good hidden">Continuer quand même</button></div>
+  <div id="empty" class="hidden"><span id="empty-text">Aucune carte avec ces filtres.</span><button id="b-ahead" class="btn good hidden">Continuer quand même</button><button id="b-switch" class="btn good hidden"></button></div>
 </main>
 
 <section id="filters">
@@ -155,7 +159,6 @@
         <span class="champ-only">Icône du sort au recto</span><span class="rune-only">Nom de la rune au recto</span><span class="item-only">Nom de l'objet au recto</span></label>
       <label class="switch champ-only not-video"><input type="checkbox" id="o-all"><i></i> Deviner tous les sorts d'un coup</label>
       <label class="switch champ-only not-video"><input type="checkbox" id="o-name"><i></i> Nom du champion au recto</label>
-      <label class="switch"><input type="checkbox" id="o-review"><i></i> Seulement les cartes à revoir maintenant</label>
     </div>
   </div>
 </section>

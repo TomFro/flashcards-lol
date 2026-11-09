@@ -38,7 +38,7 @@ function persist() {
   if (Account.mode === "user") Account.save({ progress, custom });
 }
 const prefs = Object.assign(
-  { mode: "champ", all: true, lane: [], cls: [], key: [], tree: [], slot: [], itype: ["legendary", "boots"], irole: [], icon: false, name: false, review: false },
+  { mode: "champ", all: true, lane: [], cls: [], key: [], tree: [], slot: [], itype: ["legendary", "boots"], irole: [], icon: false, name: false, learn: "discover" },
   store.get("flc_prefs", {}));
 // v2 : "tous les sorts d'un coup" devient le mode par défaut, même pour les réglages déjà enregistrés
 if (prefs.v !== 2) { prefs.all = true; prefs.v = 2; store.set("flc_prefs", prefs); }
@@ -245,13 +245,14 @@ function buildFilters() {
   chips($("f-itype"), ITYPES, "itype");
   chips($("f-irole"), ROLES, "irole");
   $("o-icon").checked = prefs.icon;
-  $("o-review").checked = prefs.review;
   $("o-name").checked = prefs.name;
   $("o-all").checked = prefs.all;
   $("o-all").onchange = (e) => { prefs.all = e.target.checked; saveAndRebuild(); };
   $("o-name").onchange = (e) => { prefs.name = e.target.checked; store.set("flc_prefs", prefs); show(); };
   $("o-icon").onchange = (e) => { prefs.icon = e.target.checked; store.set("flc_prefs", prefs); show(); };
-  $("o-review").onchange = (e) => { prefs.review = e.target.checked; saveAndRebuild(); };
+  // Découverte : seulement des cartes jamais vues / Révision : les cartes déjà notées, celles à revoir d'abord
+  document.querySelectorAll("#learnmode button").forEach((b) => (b.onclick = () => setLearn(b.dataset.m)));
+  $("b-switch").onclick = () => setLearn(prefs.learn === "discover" ? "review" : "discover");
   $("f-search").oninput = () => rebuild();
   // Entrée : quitte la recherche pour pouvoir utiliser les touches P A Z E R tout de suite
   $("f-search").onkeydown = (e) => { if (e.key === "Enter" || e.key === "Escape") e.target.blur(); };
@@ -283,7 +284,6 @@ function rebuild() {
       any(prefs.lane, c.lanes) && any(prefs.cls, c.tags) && (allMode || any(prefs.key, [c.key])) &&
       (!q || c.champ.toLowerCase().includes(q)) && !brokenVideos.has(c.id));
   }
-  if (prefs.review && !studyMode()) deck = deck.filter((c) => { const p = srs(c.id); return p && p.d <= Date.now() + LEARN_AHEAD; });
   if (studyMode()) {
     deck.sort((a, b) => a.champ.localeCompare(b.champ) || "QWER".indexOf(a.key) - "QWER".indexOf(b.key));
     studyIdx = -1;
@@ -310,6 +310,12 @@ function updateStats() {
   let known = 0, due = 0;
   for (const c of all) { const p = srs(c.id); if (!p) continue; if (p.i >= MASTERED) known++; if (p.d <= now) due++; }
   $("stats").innerHTML = `<b>${known}</b> / ${all.length} maîtrisées · <b>${due}</b> à revoir`;
+  // compteurs du choix Découverte / Révision, sur la sélection actuelle (filtres)
+  let fresh = 0, dueSel = 0;
+  for (const c of deck) { const p = srs(c.id); if (!p) fresh++; else if (p.d <= now) dueSel++; }
+  $("lm-new").textContent = `${fresh} nouvelle${fresh > 1 ? "s" : ""}`;
+  $("lm-due").textContent = `${dueSel} à revoir`;
+  document.querySelectorAll("#learnmode button").forEach((b) => b.classList.toggle("on", b.dataset.m === prefs.learn));
   $("stats-bar").style.width = all.length ? `${(100 * known) / all.length}%` : "0";
 }
 
@@ -389,14 +395,8 @@ function pickCard() {
     else if (p.d <= now + LEARN_AHEAD) soon.push(c);
     else later.push(c);
   }
-  if (due.length && fresh.length) {
-    const ids = new Set(recent.map((c) => c.id));
-    const dueOk = due.filter((c) => !ids.has(c.id));
-    // environ 1 carte sur 4 est une nouvelle, comme le mélange d'Anki
-    return !dueOk.length || Math.random() < 0.25 ? rand(varied(fresh)) : rand(varied(dueOk));
-  }
+  if (prefs.learn === "discover") return fresh.length ? rand(varied(fresh)) : null;
   if (due.length) return rand(varied(due));
-  if (fresh.length) return rand(varied(fresh));
   if (soon.length) return rand(varied(soon));
   if (ahead && later.length) return rand(varied(later.sort((a, b) => srs(a.id).d - srs(b.id).d).slice(0, 20)));
   return null;
@@ -404,14 +404,23 @@ function pickCard() {
 
 function showDone() {
   const now = Date.now();
-  const nextDue = Math.min(...deck.map((c) => srs(c.id).d));
+  const seen = deck.filter((c) => srs(c.id));
   current = null;
   $("fr-video").pause();
   $("card").classList.add("hidden");
   $("hint").classList.add("hidden");
-  $("empty-text").innerHTML = `Bravo, tout est révisé pour l'instant !<br>Prochaine carte dans <b>${fmtDelay(nextDue - now)}</b>.`;
-  $("b-ahead").classList.remove("hidden");
+  const discover = prefs.learn === "discover";
+  if (discover) $("empty-text").innerHTML = "Tu as découvert toutes les cartes de cette sélection !<br>Passe en révision pour les retravailler.";
+  else if (!seen.length) $("empty-text").innerHTML = "Aucune carte encore notée ici.<br>Commence par la découverte.";
+  else $("empty-text").innerHTML = `Bravo, tout est révisé pour l'instant !<br>Prochaine carte dans <b>${fmtDelay(Math.min(...seen.map((c) => srs(c.id).d)) - now)}</b>.`;
+  $("b-ahead").classList.toggle("hidden", discover || !seen.length);
+  $("b-switch").textContent = discover || !seen.length ? (discover ? "Passer en révision" : "Passer en découverte") : "";
+  $("b-switch").classList.toggle("hidden", !discover && !!seen.length);
   $("empty").classList.remove("hidden");
+}
+function setLearn(m) {
+  prefs.learn = m;
+  saveAndRebuild();
 }
 // Quand une carte redevient due pendant l'écran « tout est révisé », on reprend tout seul
 setInterval(() => { if (!current && deck.length && !$("empty").classList.contains("hidden") && pickCard()) next(); }, 30e3);
@@ -492,8 +501,9 @@ function next(step = 1) {
     current = null;
     $("fr-video").pause();
     $("card").classList.add("hidden");
-    $("empty-text").textContent = prefs.review ? "Aucune carte à revoir maintenant." : "Aucune carte avec ces filtres.";
+    $("empty-text").textContent = "Aucune carte avec ces filtres.";
     $("b-ahead").classList.add("hidden");
+    $("b-switch").classList.add("hidden");
     $("empty").classList.remove("hidden");
     return;
   }
@@ -643,7 +653,6 @@ function answer(g) {
   progress[current.id] = schedule(srs(current.id), g);
   persist();
   updateStats();
-  if (prefs.review && progress[current.id].d > Date.now() + LEARN_AHEAD) deck = deck.filter((c) => c.id !== current.id);
   next();
 }
 
@@ -1053,6 +1062,7 @@ document.addEventListener("click", () => { const m = document.getElementById("ac
 load()
   .then(() => {
     $("loading").classList.add("hidden");
+    $("learnmode").classList.remove("hidden");
     $("version").textContent = `Données Riot, patch ${version}${local ? " (hors ligne)" : " (en ligne)"}`;
     buildFilters();
     wire();
