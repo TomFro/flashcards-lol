@@ -209,8 +209,21 @@ const Master = (() => {
       return { c, isNew: !before, n: before + 1 };
     });
     res.sort((a, b) => (a.c.type === "skin") - (b.c.type === "skin") || a.c.r - b.c.r);
+    // pack pas encore regardé : gardé pour le remontrer si la page se recharge pendant l'ouverture
+    s.unseen = { t: title || "", c: res.map((x) => [x.c.id, x.isNew ? 1 : 0, x.n]) };
     save();
     showOpening(res, title);
+  }
+  function resumeOpening() {
+    const u = s.unseen;
+    const res = ((u && u.c) || []).map(([id, isNew, n]) => byId[id] && { c: byId[id], isNew: !!isNew, n }).filter(Boolean);
+    if (!res.length) { delete s.unseen; return; }
+    showOpening(res, "Ton dernier pack, que tu n'avais pas fini de regarder");
+  }
+  function seen() {
+    if (!s.unseen) return;
+    delete s.unseen;
+    save();
   }
   function buySkin() {
     build();
@@ -393,6 +406,7 @@ const Master = (() => {
       renderPacks();
       if (s.packs !== before) save();
     }, 1000);
+    if (s.unseen && !opening) resumeOpening();
   }
 
   // ---------- Sons ----------
@@ -476,6 +490,7 @@ const Master = (() => {
   }
   function updateOpeningButtons() {
     const hidden = $("m-reveal").querySelectorAll(".m-slot:not(.shown)").length;
+    if (hidden === 0) seen();
     $("m-all").classList.toggle("hidden", hidden === 0);
     $("m-again").classList.toggle("hidden", hidden > 0 || s.packs <= 0);
     $("m-again").textContent = `Ouvrir le suivant (${s.packs})`;
@@ -496,6 +511,7 @@ const Master = (() => {
   function closeOpening() {
     $("m-opening").classList.add("hidden");
     opening = null;
+    seen();
     render();
   }
 
