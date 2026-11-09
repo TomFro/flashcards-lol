@@ -1,7 +1,7 @@
 // Service worker : garde le site et les données téléchargées pour jouer hors ligne.
-const SHELL = "flc-shell-v1";
+const SHELL = "flc-shell-v2";
 const DATA = "flc-data";
-const SHELL_FILES = ["./", "index.html", "style.css", "app.js", "descriptions.js", "runes-desc.js", "items-desc.js", "matchups.js", "account.js", "firebase-config.js"];
+const SHELL_FILES = ["./", "index.html", "style.css", "app.js", "descriptions.js", "runes-desc.js", "items-desc.js", "matchups.js", "favicon.svg", "favicon-32.png", "apple-touch-icon.png", "account.js", "firebase-config.js"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(SHELL_FILES)).then(() => self.skipWaiting()));
