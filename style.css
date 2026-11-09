@@ -369,3 +369,14 @@ body.all-mode .key-group { display: none !important; }
 .key.big { width: 58px; height: 58px; margin: 10px 12px; border-width: 2px; box-shadow: 0 0 22px #c89b3c88, inset 0 0 12px #c89b3c44; }
 .key.big b { font-size: 30px; }
 .mode-video .icons { gap: 18px; }
+
+/* Bouton de téléchargement dans la barre du haut */
+.topbar-right { justify-self: end; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.topbar-right .mastery { justify-self: auto; }
+#dl { margin-left: 0; flex-direction: column; align-items: flex-end; gap: 4px; }
+#dl-status { font-size: 11px; text-align: right; }
+@media (max-width: 720px) {
+  .topbar-right { justify-self: center; align-items: center; }
+  #dl { align-items: center; }
+  #dl-status { text-align: center; }
+}

@@ -69,8 +69,8 @@ async function getData() {
   version = versions[0];
   return Promise.all([
     fetch(`${DD}/cdn/${version}/data/fr_FR/championFull.json`).then((r) => r.json()),
-    fetch(`${DD}/cdn/${version}/data/fr_FR/runesReforged.json`).then((r) => r.json()),
-    fetch(`${DD}/cdn/${version}/data/fr_FR/item.json`).then((r) => r.json()),
+    fetch(`${DD}/cdn/${version}/data/fr_FR/runesReforged.json`).then((r) => r.json()).catch(() => []),
+    fetch(`${DD}/cdn/${version}/data/fr_FR/item.json`).then((r) => r.json()).catch(() => ({ data: {} })),
   ]);
 }
 
@@ -190,15 +190,15 @@ function buildItems(items) {
     else if (it.from && it.from.length && it.into && it.into.length) itype = "epic";
     if (!itype) continue;
     const desc = window.ITEM_DESC[id] || {};
-    const statsHtml = (/<stats>([\s\S]*?)<\/stats>/.exec(it.description) || [])[1] || "";
+    const statsHtml = (/<stats>([\s\S]*?)<\/stats>/.exec(it.description || "") || [])[1] || "";
     const stats = statsHtml.split(/<br\s*\/?>/i).map(clean).filter(Boolean);
-    const effects = [...it.description.matchAll(/<(passive|active)>([\s\S]*?)<\/\1>/g)].map((m) => clean(m[2])).filter(Boolean);
+    const effects = [...(it.description || "").matchAll(/<(passive|active)>([\s\S]*?)<\/\1>/g)].map((m) => clean(m[2])).filter(Boolean);
     const roles = desc.who ? desc.who.split(" ") : guessRoles(tags);
     cards.item.push({
       id: `item_${id}`, type: "item", itype, name: it.name, icon: url.item(it.image.full), img: url.item(it.image.full),
       gold: it.gold.total, stats, roles, note: desc.note || "",
       short: desc.d || clean(it.plaintext) || firstEffect(it.description) || (effects.length ? `Effets : ${[...new Set(effects)].join(", ")}` : "Objet de stats"),
-      official: clean(it.description.replace(/<br\s*\/?>/gi, " · ")),
+      official: clean((it.description || "").replace(/<br\s*\/?>/gi, " · ")),
     });
   }
 }
@@ -645,7 +645,7 @@ function updateDlButton() {
   if (downloading) return;
   $("dl-bar").parentElement.classList.add("hidden");
   if (!canCache()) {
-    btn.textContent = local ? "Mise à jour : mise-a-jour.bat" : "Hors ligne : version en ligne";
+    btn.textContent = "⟳ Mettre à jour les données";
     btn.title = local ? "Lance mise-a-jour.bat dans le dossier du site" : "Les boutons de téléchargement marchent sur la page GitHub du site";
     $("dl-status").textContent = "";
     return;
@@ -659,9 +659,9 @@ function updateDlButton() {
 
 async function downloadSection() {
   if (!canCache()) {
-    $("banner").innerHTML = local
-      ? "Pour mettre à jour la version sur ton PC, double-clique sur <b>mise-a-jour.bat</b> dans le dossier du site."
-      : 'Les boutons de téléchargement marchent sur la version en ligne : <a href="https://tomfro.github.io/flashcards-lol/">tomfro.github.io/flashcards-lol</a>';
+    $("banner").innerHTML = 'Tu as ouvert le fichier depuis ton dossier : ici, le navigateur ne peut pas enregistrer les données. '
+      + "Double-clique sur <b>mise-a-jour.bat</b> dans le dossier du site, "
+      + 'ou utilise la version en ligne où ce bouton télécharge tout : <a href="https://tomfro.github.io/flashcards-lol/">tomfro.github.io/flashcards-lol</a>';
     $("banner").classList.remove("hidden");
     return;
   }

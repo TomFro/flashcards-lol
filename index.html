@@ -19,9 +19,12 @@
     <button data-mode="rune">Runes</button>
     <button data-mode="item">Objets</button>
   </nav>
-  <div class="mastery">
-    <div class="mastery-text" id="stats"></div>
-    <div class="bar"><div id="stats-bar"></div></div>
+  <div class="topbar-right">
+    <div class="mastery">
+      <div class="mastery-text" id="stats"></div>
+      <div class="bar"><div id="stats-bar"></div></div>
+    </div>
+    <div id="dl"><button id="dl-btn"></button><em id="dl-status"></em><div class="dl-track hidden"><div id="dl-bar"></div></div></div>
   </div>
 </header>
 
@@ -103,7 +106,6 @@
 
 <section id="filters">
   <div class="filters-title"><span>Filtres</span><em id="count"></em>
-    <div id="dl"><em id="dl-status"></em><button id="dl-btn"></button><div class="dl-track hidden"><div id="dl-bar"></div></div></div>
   </div>
   <div class="filters-grid">
     <div class="group champ-only">
