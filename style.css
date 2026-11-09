@@ -217,7 +217,7 @@ footer button.link { margin: 0; font-size: 11px; }
   color: var(--gold1); background: var(--panel); border: 1px solid var(--gold4); transition: all .15s;
 }
 #spellbar button:hover, #detail-tabs button:hover { border-color: var(--gold2); box-shadow: 0 0 10px #c89b3c44; }
-#detail-tabs button.on { border-color: var(--gold2); background: linear-gradient(180deg, #3c3014, #1e2328); box-shadow: 0 0 10px #c89b3c55; }
+#detail-tabs button.on, #spellbar button.on { border-color: var(--gold2); background: linear-gradient(180deg, #3c3014, #1e2328); box-shadow: 0 0 10px #c89b3c55; }
 
 /* ---------- Fiche détaillée ---------- */
 #detail { position: fixed; inset: 0; z-index: 50; background: #010a13b3; backdrop-filter: blur(3px); display: grid; place-items: center; padding: 16px; }
@@ -307,18 +307,22 @@ body.mode-item .champ-only, body.mode-item .rune-only, body:not(.mode-item) .ite
 
 /* ---------- Détails dans la carte (remplace l'ancienne fenêtre) ---------- */
 .card { transition: width .45s cubic-bezier(.4,0,.2,1), height .45s cubic-bezier(.4,0,.2,1); max-width: 94vw; }
-.card.flipped.detailed, .card.flipped.all { width: 540px; }
-.mode-video .card.flipped.detailed { width: 640px; height: 580px; }
+.card.flipped.all { width: 540px; }
+/* fondu direct sur la carte, sans changer sa taille */
 #detail {
   position: absolute; inset: 0; z-index: 5; display: block; padding: 0; overflow: auto; backdrop-filter: none;
   background: radial-gradient(ellipse at 50% 0%, #0b3b4d 0%, #091428 50%, #010a13 100%);
-  clip-path: circle(0% at 50% 100%); opacity: 0; pointer-events: none;
-  transition: clip-path .6s cubic-bezier(.4,0,.2,1), opacity .25s;
+  opacity: 0; visibility: hidden; transition: opacity .18s ease, visibility 0s linear .18s; cursor: pointer;
 }
-.card.detailed #detail { clip-path: circle(150% at 50% 100%); opacity: 1; pointer-events: auto; }
-.detail-box { width: auto; max-height: none; overflow: visible; padding: 26px 26px 18px; border: none; background: none; box-shadow: none; text-align: left; }
-#detail.swap .detail-box { animation: swapIn .35s ease; }
-@keyframes swapIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.card.detailed #detail { opacity: 1; visibility: visible; transition: opacity .18s ease; }
+.detail-box { width: auto; max-height: none; overflow: visible; padding: 22px 20px 16px; border: none; background: none; box-shadow: none; text-align: left; }
+#detail-close, #detail-tabs { display: none !important; }
+.detail-head { margin-bottom: 14px; }
+#detail.swap .detail-box { animation: swapIn .18s ease; }
+@keyframes swapIn { from { opacity: 0; } to { opacity: 1; } }
+.card:not(.all) .detail-box { padding: 18px 16px 14px; }
+.card:not(.all) #detail-name { font-size: 18px; }
+.card:not(.all) #detail-body { font-size: 13px; line-height: 1.5; }
 #detail::-webkit-scrollbar { width: 6px; }
 #detail::-webkit-scrollbar-thumb { background: var(--gold4); }
 
@@ -345,7 +349,7 @@ body.all-mode .key-group { display: none !important; }
 .all-hint { font-size: 11px; color: var(--grey2); margin-top: 8px; text-align: center; }
 
 @media (max-width: 720px) {
-  .card.flipped.detailed, .card.flipped.all { width: 94vw; aspect-ratio: auto; }
+  .card.flipped.all { width: 94vw; aspect-ratio: auto; }
   .all-row { padding: 6px 8px; gap: 8px; }
   .all-row img { width: 34px; height: 34px; }
   .all-text > span { font-size: 12px; }

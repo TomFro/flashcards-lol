@@ -569,7 +569,7 @@ function openDetail(key) {
   if (!$("card").classList.contains("flipped")) return; // seulement une fois la carte révélée
   const c = champRaw[current.champId];
   if (!c) return;
-  $("detail-tabs").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.k === key));
+  document.querySelectorAll("#detail-tabs button, #spellbar button").forEach((b) => b.classList.toggle("on", b.dataset.k === key));
   let name, icon, body, stats = [];
   if (key === "P") {
     name = c.passive.name; icon = url.passive(c.passive.image.full);
@@ -603,7 +603,11 @@ function openDetail(key) {
     if ($("detail").dataset.k === key && current && current.champId === champId) $("detail-values").innerHTML = merakiHtml(data, key);
   });
 }
-function closeDetail() { $("card").classList.remove("detailed"); $("detail").dataset.k = ""; }
+function closeDetail() {
+  $("card").classList.remove("detailed");
+  $("detail").dataset.k = "";
+  document.querySelectorAll("#spellbar button").forEach((b) => b.classList.remove("on"));
+}
 // touche du clavier français -> sort
 const AZERTY = { Q: "A", W: "Z", E: "E", R: "R" };
 const KEY_FROM_PRESS = { p: "P", a: "Q", q: "Q", z: "W", w: "W", e: "E", r: "R" };
@@ -611,9 +615,13 @@ const KEY_FROM_PRESS = { p: "P", a: "Q", q: "Q", z: "W", w: "W", e: "E", r: "R" 
 function wire() {
   $("detail-close").onclick = (e) => { e.stopPropagation(); closeDetail(); };
   $("detail-tabs").querySelectorAll("button").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); openDetail(b.dataset.k); }));
-  $("spellbar").querySelectorAll("button").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); openDetail(b.dataset.k); }));
+  $("spellbar").querySelectorAll("button").forEach((b) => (b.onclick = (e) => {
+    e.stopPropagation();
+    if (isDetail() && $("detail").dataset.k === b.dataset.k) closeDetail(); else openDetail(b.dataset.k);
+  }));
   $("card").onclick = (e) => {
-    if (e.target.closest("details, #edit, #detail, .all-row")) return;
+    if (isDetail()) { closeDetail(); return; } // détail ouvert : toucher la carte n'importe où le ferme
+    if (e.target.closest("details, #edit, .all-row")) return;
     flip();
   };
   $("b-again").onclick = () => answer(false);
@@ -641,10 +649,15 @@ function wire() {
     else if (e.key === "2" || e.key === "ArrowRight") answer(true);
     else if (e.key === "Escape") closeDetail();
     else if (KEY_FROM_PRESS[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      const k = KEY_FROM_PRESS[e.key.toLowerCase()];
-      if (isDetail() && $("detail").dataset.k === k) closeDetail(); else openDetail(k);
+      // le détail reste affiché tant que la touche est enfoncée
+      if (!e.repeat) openDetail(KEY_FROM_PRESS[e.key.toLowerCase()]);
     }
   });
+  document.addEventListener("keyup", (e) => {
+    const k = KEY_FROM_PRESS[(e.key || "").toLowerCase()];
+    if (k && isDetail() && $("detail").dataset.k === k) closeDetail();
+  });
+  window.addEventListener("blur", () => { if (isDetail()) closeDetail(); });
 }
 
 // ---------- Téléchargement par section (hors ligne dans le navigateur) ----------
