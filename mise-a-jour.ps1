@@ -45,6 +45,7 @@ foreach ($m in $imgs) {
   if ($group -eq 'champion') {
     $id = [IO.Path]::GetFileNameWithoutExtension($full)
     $n += Save-File "$DD/cdn/img/champion/loading/$($id)_0.jpg" (Join-Path $data "img\loading\$($id)_0.jpg")
+    $n += Save-File "$DD/cdn/$v/img/champion/$full" (Join-Path $data "img\champion\$full")
   } elseif ($group -eq 'spell' -or $group -eq 'passive') {
     $n += Save-File "$DD/cdn/$v/img/$group/$full" (Join-Path $data "img\$group\$full")
   }

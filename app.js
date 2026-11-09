@@ -53,6 +53,7 @@ const url = {
   spell: (f) => local ? `data/img/spell/${f}` : `${DD}/cdn/${version}/img/spell/${f}`,
   passive: (f) => local ? `data/img/passive/${f}` : `${DD}/cdn/${version}/img/passive/${f}`,
   rune: (icon) => local ? `data/img/runes/${icon}` : `${DD}/cdn/img/${icon}`,
+  square: (id) => local ? `data/img/champion/${id}.png` : `${DD}/cdn/${version}/img/champion/${id}.png`,
   item: (f) => local ? `data/img/item/${f}` : `${DD}/cdn/${version}/img/item/${f}`,
   videoLocal: (k, s) => `data/videos/${k}_${s}.webm`,
   videoOnline: (k, s) => `${VIDEO}/${k}/ability_${k}_${s}1.webm`,
@@ -303,6 +304,7 @@ function next() {
   $("card").classList.remove("flipped");
   $("answer").classList.add("hidden");
   $("spellbar").classList.add("hidden");
+  $("matchups").classList.add("hidden");
   $("hint").classList.toggle("hidden", deck.length === 0);
   if (deck.length === 0) {
     current = null;
@@ -423,6 +425,21 @@ function flip() {
   $("answer").classList.toggle("hidden", !flipped);
   $("hint").classList.toggle("hidden", flipped);
   $("spellbar").classList.toggle("hidden", !flipped || !["champ", "video"].includes(current.type));
+  showMatchups(flipped && ["champ", "video"].includes(current.type) ? current.champId : null);
+}
+
+// 5 bons et 5 mauvais matchups sous la carte, une fois retournée
+const MU_LANE = { top: "en top", jungle: "en jungle", mid: "en mid", adc: "en bot", support: "en support" };
+function showMatchups(champId) {
+  const box = $("matchups");
+  const m = champId && window.MATCHUPS && window.MATCHUPS[champId];
+  box.classList.toggle("hidden", !m);
+  if (!m) return;
+  const list = (ids) => ids.filter((id) => champRaw[id]).map((id) =>
+    `<div class="mu" title="${champRaw[id].name}"><img src="${url.square(id)}" alt="" loading="lazy"><span>${champRaw[id].name}</span></div>`).join("");
+  box.innerHTML = `
+    <div class="mu-col good"><h4>Bons matchups <em>${MU_LANE[m.lane] || ""}</em></h4><div class="mu-list">${list(m.good)}</div></div>
+    <div class="mu-col bad"><h4>Mauvais matchups <em>${MU_LANE[m.lane] || ""}</em></h4><div class="mu-list">${list(m.bad)}</div></div>`;
 }
 
 function answer(good) {
@@ -640,7 +657,7 @@ function sectionUrls(section) {
   const urls = new Set([`${DD}/api/versions.json`]);
   if (section === "champ") {
     urls.add(`${DD}/cdn/${version}/data/fr_FR/championFull.json`);
-    for (const c of cards.champ) { urls.add(c.img); urls.add(c.icon); }
+    for (const c of cards.champ) { urls.add(c.img); urls.add(c.icon); urls.add(url.square(c.champId)); }
     for (const id of Object.keys(champRaw)) urls.add(`${MERAKI}/${id}.json`);
   } else if (section === "video") {
     for (const c of cards.video) urls.add(c.videos[c.videos.length - 1]);
