@@ -390,6 +390,7 @@ function show() {
   $("bk-title").querySelector("b").textContent = c.name;
   $("bk-icon").src = c.icon;
   $("bk-desc").textContent = custom[c.id.replace(/^vid_/, "")] || c.short;
+  $("bk-desc").classList.toggle("long", $("bk-desc").textContent.length > 100);
   $("bk-who").innerHTML = c.type === "item" && c.roles.length
     ? `<span>Pour</span> ${c.roles.map((r) => ROLES[r]).join(", ")}${c.note ? `<em>${c.note}</em>` : ""}` : "";
   $("bk-cd").innerHTML = c.type === "item"

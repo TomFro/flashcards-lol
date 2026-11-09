@@ -134,6 +134,7 @@ body::before {
 #bk-title { margin-top: 18px; font-size: 11px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--blue2); }
 #bk-title b { display: block; margin-top: 6px; font-family: var(--title); font-size: 21px; letter-spacing: 1px; text-transform: none; color: var(--gold1); }
 #bk-desc { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 20px; line-height: 1.45; color: var(--gold1); padding: 0 4px; }
+#bk-desc.long { font-size: 17px; line-height: 1.4; }
 #bk-cd { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin: 4px 0 14px; }
 #bk-cd:empty { display: none; }
 #bk-cd .cd-label { width: 100%; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--grey1); margin-bottom: 2px; }
@@ -307,7 +308,7 @@ body.mode-item .champ-only, body.mode-item .rune-only, body:not(.mode-item) .ite
 
 /* ---------- Détails dans la carte (remplace l'ancienne fenêtre) ---------- */
 .card { transition: width .45s cubic-bezier(.4,0,.2,1), height .45s cubic-bezier(.4,0,.2,1); max-width: 94vw; }
-.card.flipped.all { width: 540px; }
+.card.flipped.all { width: 580px; height: 600px; }
 /* fondu direct sur la carte, sans changer sa taille */
 #detail {
   position: absolute; inset: 0; z-index: 5; display: block; padding: 0; overflow: auto; backdrop-filter: none;
@@ -349,7 +350,7 @@ body.all-mode .key-group { display: none !important; }
 .all-hint { font-size: 11px; color: var(--grey2); margin-top: 8px; text-align: center; }
 
 @media (max-width: 720px) {
-  .card.flipped.all { width: 94vw; aspect-ratio: auto; }
+  .card.flipped.all { width: 94vw; height: 580px; aspect-ratio: auto; }
   .all-row { padding: 6px 8px; gap: 8px; }
   .all-row img { width: 34px; height: 34px; }
   .all-text > span { font-size: 12px; }
