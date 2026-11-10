@@ -276,8 +276,9 @@ const Master = (() => {
   function cardHtml(c, { n = 0, back = false, big = false, isNew = false } = {}) {
     const missing = n === 0 && !back && !isNew;
     const art = c.type === "champ" || c.type === "skin"
-      ? `<img class="mc-champ" src="${c.art}" alt="" loading="lazy">`
-      : `${c.art ? `<img class="mc-blur" src="${c.art}" alt="" loading="lazy">` : ""}<img class="mc-icon" src="${c.icon}" alt="" loading="lazy">`;
+      ? `<img class="mc-champ" src="${c.art}" alt="" decoding="async">`
+      : `${c.art ? `<img class="mc-blur" src="${c.art}" alt="" decoding="async">` : ""}<img class="mc-icon" src="${c.icon}" alt="" decoding="async">`;
+    // pas de loading="lazy" : certaines images de skins ne se chargeaient jamais (la grille est déjà limitée à 60 cartes à la fois)
     const keyBadge = c.type === "spell" ? `<div class="key mc-key"><b>${c.key === "P" ? "P" : AZERTY[c.key]}</b></div>` : "";
     return `<div class="mc r-${RAR[c.r]} t-${c.type}${missing ? " missing" : ""}${big ? " big" : ""}" data-id="${c.id}">
       <div class="mc-frame">
@@ -1084,19 +1085,25 @@ const Master = (() => {
     if (rb) rb.onclick = (e) => { e.stopPropagation(); recycle(id); view(id); renderGrid(); };
   }
 
-  // image de skin introuvable chez Data Dragon (souvent les skins récents) : on prend le splash de CommunityDragon,
-  // et si lui non plus ne charge pas, l'image de base du champion
+  // image de skin introuvable chez Data Dragon (souvent les skins récents) : on essaie deux adresses de CommunityDragon,
+  // et si aucune ne charge, l'image de base du champion
   document.addEventListener("error", (e) => {
     const img = e.target;
     if (!img || img.tagName !== "IMG") return;
     const m = img.src.match(/\/champion\/loading\/(\w+)_(\d+)\.jpg$/);
     if (m && m[2] !== "0") {
       const raw = champRaw[m[1]];
-      img.src = raw ? `https://cdn.communitydragon.org/latest/champion/${raw.key}/splash-art/centered/skin/${m[2]}` : `${DD}/cdn/img/champion/loading/${m[1]}_0.jpg`;
-      img.dataset.champ = m[1];
-    } else if (img.dataset.champ && img.src.includes("communitydragon")) {
-      img.src = `${DD}/cdn/img/champion/loading/${img.dataset.champ}_0.jpg`;
-      delete img.dataset.champ;
+      if (!raw) { img.src = `${DD}/cdn/img/champion/loading/${m[1]}_0.jpg`; return; }
+      img.dataset.fb = JSON.stringify([
+        `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-splashes/${raw.key}/${+raw.key * 1000 + +m[2]}.jpg`,
+        `${DD}/cdn/img/champion/loading/${m[1]}_0.jpg`,
+      ]);
+      img.src = `https://cdn.communitydragon.org/latest/champion/${raw.key}/splash-art/centered/skin/${m[2]}`;
+    } else if (img.dataset.fb) {
+      const rest = JSON.parse(img.dataset.fb);
+      const nextSrc = rest.shift();
+      if (rest.length) img.dataset.fb = JSON.stringify(rest); else delete img.dataset.fb;
+      if (nextSrc) img.src = nextSrc;
     }
   }, true);
 
