@@ -105,6 +105,7 @@ window.Account = (() => {
     try {
       const cred = await firebase.auth().createUserWithEmailAndPassword(email.trim(), password);
       await cred.user.updateProfile({ displayName: name.trim().slice(0, 30) });
+      try { await cred.user.getIdToken(true); } catch {} // pour que le pseudo soit dans le jeton envoyé au serveur du jeu
       user = cred.user;
       try { localStorage.setItem(LAST, JSON.stringify({ uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL })); } catch {}
       emit();
@@ -147,16 +148,25 @@ window.Account = (() => {
       const uid = user && user.uid;
       if (!uid || !pending) return;
       writes++;
+      const data = { ...pending, updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+      // sans collection LoL Master dans l'envoi (elle est tenue par le serveur du jeu), on ne touche qu'aux champs envoyés
       db.collection("users").doc(uid)
-        .set({ ...pending, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+        .set(data, "master" in data ? {} : { mergeFields: Object.keys(data) })
         .then(() => { if (--writes === 0 && !pending) localStorage.removeItem("flc_unsynced"); })
         .catch((e) => { writes--; console.error("Sauvegarde du compte impossible", e); });
       pending = null;
     }, 1500);
   }
 
+  // jeton de connexion, que le serveur du jeu vérifie pour savoir qui demande
+  async function token() {
+    const u = window.firebase && firebase.auth().currentUser;
+    if (!u) throw new Error("Pas connecté.");
+    return u.getIdToken();
+  }
+
   return {
-    init, signIn, signInEmail, signUpEmail, resetPassword, signOut, load, save, watch,
+    token, init, signIn, signInEmail, signUpEmail, resetPassword, signOut, load, save, watch,
     get mode() { return mode; },
     get user() { return user; },
     get restoring() { return restoring; },

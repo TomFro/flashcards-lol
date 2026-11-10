@@ -1,0 +1,30 @@
+rules_version = '2';
+// Règles à publier UNE FOIS le serveur du jeu installé (voir serveur/INSTALLER.md).
+// Les collections LoL Master, le marché et la liste des cartes ne s'écrivent plus que par le serveur
+// (sa clé de service passe outre ces règles). Le navigateur ne peut plus rien s'y donner.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // progression des flashcards : chacun la sienne. L'ancienne collection LoL Master (champ master)
+    // est gelée : le serveur la reprend une fois, il ne faut plus qu'on puisse la modifier.
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid && !("master" in request.resource.data);
+      allow update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.get("master", null) == resource.data.get("master", null);
+    }
+    // LoL Master : collections (tenues par le serveur), lisibles par les joueurs connectés
+    match /profiles/{uid} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    // LoL Master : marché, lisible par les joueurs connectés, écrit par le serveur
+    match /market/{id} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    // liste des cartes envoyée au serveur : personne d'autre n'y touche
+    match /config/{id} {
+      allow read, write: if false;
+    }
+  }
+}

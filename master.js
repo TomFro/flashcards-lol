@@ -32,6 +32,149 @@ const Master = (() => {
   Object.assign(ui, store.get("flc_master_ui", {}), { shown: PAGE, q: "" });
   let opening = null, timer = null;
 
+
+  // ---------- Serveur du jeu ----------
+  // Quand window.MASTER_API est réglé (firebase-config.js), la collection d'un joueur connecté appartient au serveur :
+  // c'est lui qui tire les cartes, compte l'or et les packs. Le navigateur ne fait que demander et afficher.
+  // (Un invité joue toujours dans son navigateur ; à l'inscription, ses packs ouverts lui sont rendus à rouvrir.)
+  const API = String(window.MASTER_API || "").replace(/\/+$/, "") || null;
+  const served = () => !!API && !isGuest();
+  const online = () => served() && Account.mode === "user";
+  const srv = { admin: false, poolHash: null, busy: false, skew: 0, sent: null };
+  const clock = () => Date.now() + (served() ? srv.skew : 0); // heure du serveur, pour le compte à rebours
+  const avail = () => s.packs + (served() ? s.bonus || 0 : 0);
+  let noteTimer = null;
+  function note(msg) {
+    let el = $("m-note");
+    if (!el) { el = document.createElement("div"); el.id = "m-note"; document.body.appendChild(el); }
+    el.textContent = msg;
+    el.classList.add("on");
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => el.classList.remove("on"), 4500);
+  }
+  const KEYS = ["v", "gold", "packs", "t", "inv", "at", "pity", "opened", "team", "bonus"];
+  let teamDirty = false, teamSeq = 0, teamTimer = null;
+  // prend la collection renvoyée par le serveur (l'équipe en cours de modification ici est gardée)
+  function adopt(st) {
+    if (!st || st.v !== V) return;
+    const team = teamDirty ? s.team : null;
+    const n = fresh();
+    for (const k of KEYS) if (st[k] !== undefined && st[k] !== null) n[k] = st[k];
+    n.pity = Object.assign({ e: 0, l: 0 }, n.pity);
+    n.team = team || n.team || {};
+    for (const t of Object.values(n.team)) { t.it ||= []; t.ru ||= []; }
+    s = n;
+    store.set("flc_master", s);
+  }
+  async function api(op, args = {}) {
+    if (!online()) throw new Error("Il faut être connecté à internet pour ça.");
+    let data = null;
+    try {
+      const token = await Account.token();
+      const res = await fetch(API, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify({ op, ...args }) });
+      data = await res.json();
+    } catch { throw new Error("Serveur du jeu injoignable. Vérifie ta connexion et réessaie."); }
+    if (!data || !data.ok) {
+      const e = new Error((data && data.message) || "Le serveur a refusé cette action.");
+      e.code = data && data.error;
+      throw e;
+    }
+    srv.admin = !!data.admin;
+    if (typeof data.poolHash === "string") srv.poolHash = data.poolHash;
+    if (data.now) srv.skew = data.now - Date.now();
+    if (data.state) adopt(data.state);
+    return data.result || {};
+  }
+  // au chargement du compte : lit la collection sur le serveur. guestOpened = packs ouverts en invité sur cet appareil.
+  // Renvoie true quand les packs de l'invité sont réglés (rendus, ou trop tard pour ce compte).
+  async function sync(guestOpened) {
+    if (!online()) return false;
+    let done = true;
+    try {
+      await api("state");
+      if (guestOpened > 0) {
+        try {
+          const r = await api("guest", { opened: guestOpened });
+          seen(); // le pack de l'invité resté ouvert n'est pas sur le compte
+          if (r.granted) note(`Tes ${r.granted} packs ouverts en invité t'attendent sur ton compte : rouvre-les !`);
+        } catch (e) { if (e.code !== "too-late") done = false; }
+      }
+    } catch (e) { console.warn("Serveur du jeu :", e.message); return false; }
+    watchMine();
+    checkPool();
+    if (prefs.mode === "master" && !opening) render();
+    return done;
+  }
+  // suit sa propre collection : un pack ouvert ou une carte vendue ailleurs arrive ici tout de suite
+  let unwatchMine = null, watchedUid = null;
+  function watchMine() {
+    const db = Account.db, u = Account.user;
+    if (!db || !u || watchedUid === u.uid) return;
+    if (unwatchMine) unwatchMine();
+    watchedUid = u.uid;
+    unwatchMine = db.collection("profiles").doc(u.uid).onSnapshot((snap) => {
+      if (!online() || !Account.user || Account.user.uid !== watchedUid || !snap.exists || snap.metadata.fromCache || srv.busy) return;
+      const d = snap.data();
+      if (!d.srv) return;
+      const before = JSON.stringify([s.inv, s.gold, s.packs, s.bonus, s.opened]);
+      adopt(d);
+      if (JSON.stringify([s.inv, s.gold, s.packs, s.bonus, s.opened]) !== before && prefs.mode === "master" && !opening) render();
+    }, (e) => { watchedUid = null; console.warn("Suivi de la collection impossible", e); });
+  }
+  // compte administrateur : envoie au serveur la liste des cartes et leurs raretés quand elle a changé
+  function poolList() {
+    const list = pool.map((c) => [c.id, c.r]).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+    let h = 2166136261;
+    const txt = JSON.stringify(list);
+    for (let i = 0; i < txt.length; i++) { h ^= txt.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return { list, hash: `${list.length}-${(h >>> 0).toString(36)}` };
+  }
+  async function checkPool() {
+    build();
+    // sans les vraies catégories des skins (CommunityDragon), on n'envoie rien : la liste serait moins bonne que celle en place
+    if (!online() || !srv.admin || !pool || !skinTiers || !skinTiers.map || !Object.keys(skinTiers.map).length) return;
+    const { list, hash } = poolList();
+    if (hash === srv.poolHash || hash === srv.sent) return;
+    srv.sent = hash;
+    try { const r = await api("pool", { list, hash }); srv.poolHash = hash; note(`Liste des cartes envoyée au serveur (${r.n} cartes).`); }
+    catch (e) { srv.sent = null; note(`Liste des cartes pas envoyée : ${e.message}`); }
+  }
+  // les cartes tirées par le serveur : même affichage qu'avant
+  async function openOnline(op) {
+    if (srv.busy) return;
+    if (!online()) return note("Il faut être connecté à internet pour ouvrir un pack.");
+    build();
+    if (!pool) return;
+    srv.busy = true;
+    try {
+      const r = await api(op);
+      const res = (r.cards || []).map((x) => byId[x.id] && { c: byId[x.id], isNew: !!x.isNew, n: x.n }).filter(Boolean);
+      if (!res.length) { note("Tes cartes sont arrivées. Recharge la page pour les voir."); return; }
+      present(res, op === "skin" ? "Skin acheté !" : r.special ? "Pack spécial : la dernière carte est un skin !" : "");
+    } catch (e) {
+      note(e.message);
+      if (e.code === "no-pack" || e.code === "no-gold") await api("state").catch(() => {});
+      if (opening) updateOpeningButtons(); else render();
+    } finally { srv.busy = false; }
+  }
+  // équipe : envoyée au serveur un instant après le dernier changement
+  function saveTeam() {
+    save();
+    if (!served()) return;
+    if (!online()) return note("Il faut être connecté à internet pour changer ton équipe.");
+    teamDirty = true;
+    const n = ++teamSeq;
+    clearTimeout(teamTimer);
+    teamTimer = setTimeout(async () => {
+      try {
+        const r = await api("team", { team: s.team });
+        if (n !== teamSeq) return;
+        teamDirty = false;
+        if (r.team) { s.team = r.team; for (const t of Object.values(s.team)) { t.it ||= []; t.ru ||= []; } store.set("flc_master", s); }
+      } catch (e) { if (n === teamSeq) { teamDirty = false; note(`Équipe pas enregistrée : ${e.message}`); } }
+    }, 700);
+  }
+
   // ---------- Raretés des skins ----------
   // Rareté d'un skin = sa catégorie de prix chez Riot, lue dans skins.json de CommunityDragon (gardé une semaine dans le navigateur)
   const CDRAGON_SKINS = "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/skins.json";
@@ -52,6 +195,7 @@ const Master = (() => {
       store.set("flc_skin_tiers", skinTiers);
       pool = null; byId = {}; byTypeRar = {}; // on recalcule les raretés avec les vraies catégories
       if (prefs.mode === "master" && !opening) render();
+      checkPool();
     } catch (e) { console.warn("Raretés des skins indisponibles, rangées d'après leur nom", e); }
   }
 
@@ -160,7 +304,7 @@ const Master = (() => {
 
   // ---------- Packs ----------
   function tick() {
-    const now = Date.now();
+    const now = clock();
     if (s.t > now) s.t = now; // horloge revenue en arrière
     if (s.packs >= CAP) { s.t = now; return false; }
     const n = Math.floor((now - s.t) / EVERY);
@@ -220,6 +364,9 @@ const Master = (() => {
       if (!before) s.at[c.id] = now;
       return { c, isNew: !before, n: before + 1 };
     });
+    present(res, title);
+  }
+  function present(res, title) {
     res.sort((a, b) => (a.c.type === "skin") - (b.c.type === "skin") || a.c.r - b.c.r);
     // pack pas encore regardé : gardé pour le remontrer si la page se recharge pendant l'ouverture
     // (gardé sur cet appareil seulement : un autre appareil n'a pas à rouvrir ce pack)
@@ -237,6 +384,7 @@ const Master = (() => {
     try { localStorage.removeItem("flc_master_unseen"); } catch {}
   }
   function buySkin() {
+    if (served()) return openOnline("skin");
     build();
     if (!pool || (s.gold || 0) < SKIN_PRICE) return;
     const k = pickCard("skin", rollRarity(0, SKIN_ODDS), new Set());
@@ -246,6 +394,7 @@ const Master = (() => {
   }
 
   function openPack() {
+    if (served()) return openOnline("open");
     tick();
     if (s.packs <= 0 || !pool) return;
     s.packs--;
@@ -281,6 +430,7 @@ const Master = (() => {
   }
 
   function save() {
+    if (served()) { store.set("flc_master", s); return; } // le serveur garde la collection : ici, juste une copie pour l'affichage
     s.hist = [...(s.hist || []).slice(-199), tok()];
     if (isGuest()) { store.set("flc_master_guest", s); return; } // invité : gardé à part, passé au compte à l'inscription
     store.set("flc_master", s);
@@ -349,16 +499,19 @@ const Master = (() => {
 
   function renderPacks() {
     tick();
-    $("m-count").textContent = s.packs;
-    $("m-open").disabled = s.packs <= 0;
-    $("m-open").textContent = s.packs > 0 ? "Ouvrir un pack" : "Plus de pack";
-    if (s.packs >= CAP) $("m-timer").textContent = `Maximum atteint (${CAP} packs) : ouvre-en pour en regagner`;
+    const bonus = served() ? s.bonus || 0 : 0;
+    $("m-count").textContent = avail();
+    $("m-open").disabled = avail() <= 0;
+    $("m-open").textContent = avail() > 0 ? "Ouvrir un pack" : "Plus de pack";
+    if (bonus) $("m-timer").textContent = `Dont ${bonus} pack${bonus > 1 ? "s" : ""} rendu${bonus > 1 ? "s" : ""} pour ceux ouverts en invité`;
+    else if (s.packs >= CAP) $("m-timer").textContent = `Maximum atteint (${CAP} packs) : ouvre-en pour en regagner`;
     else {
-      const left = Math.max(0, s.t + EVERY - Date.now());
+      const left = Math.max(0, s.t + EVERY - clock());
       const m = Math.floor(left / 60e3), sec = Math.floor((left % 60e3) / 1000);
       $("m-timer").textContent = `+${PER} packs dans ${m}:${String(sec).padStart(2, "0")}`;
     }
     $("m-guest").classList.toggle("hidden", !isGuest());
+    if (API) $("m-guest").textContent = "Mode invité : crée un compte pour garder ta collection. Les packs ouverts ici te seront rendus à rouvrir sur ton compte (20 au plus).";
     const left = SPECIAL_EVERY - (s.opened % SPECIAL_EVERY);
     $("m-special").textContent = (left === 1 ? "Le prochain pack est spécial : 6 cartes dont un skin !" : `Pack spécial avec un skin dans ${left} packs`) + ` · ${s.gold || 0} or`;
     $("m-skin").textContent = `Acheter un skin (${SKIN_PRICE} or)`;
@@ -529,8 +682,8 @@ const Master = (() => {
     const hidden = $("m-reveal").querySelectorAll(".m-slot:not(.shown)").length;
     if (hidden === 0) seen();
     $("m-all").classList.toggle("hidden", hidden === 0);
-    $("m-again").classList.toggle("hidden", hidden > 0 || s.packs <= 0);
-    $("m-again").textContent = `Ouvrir le suivant (${s.packs})`;
+    $("m-again").classList.toggle("hidden", hidden > 0 || avail() <= 0);
+    $("m-again").textContent = `Ouvrir le suivant (${avail()})`;
     $("m-close").textContent = hidden > 0 ? "Fermer" : "Voir ma collection";
     if (hidden === 0) {
       const nNew = opening.filter((x) => x.isNew).length;
@@ -712,7 +865,7 @@ const Master = (() => {
     const opts = pool.filter((x) => x.type === "skin" && x.champId === t.c && s.inv[x.id])
       .map((x) => ({ c: x, v: x.id, img: x.art, search: x.name, note: `${RAR_FR[RAR[x.r]]}${t.sk === x.id ? " · équipé" : ""}` }))
       .sort((a, b) => b.c.r - a.c.r || a.c.name.localeCompare(b.c.name));
-    openPicker(`Skin de ${byId[`c_${t.c}`].name} (✕ = skin de base)`, opts, (id) => { t.sk = id || null; save(); renderTeam(); }, true);
+    openPicker(`Skin de ${byId[`c_${t.c}`].name} (✕ = skin de base)`, opts, (id) => { t.sk = id || null; saveTeam(); renderTeam(); }, true);
   }
 
   // ---- choix dans une liste ----
@@ -764,7 +917,7 @@ const Master = (() => {
         [f.c, t.c] = [t.c, f.c];
         [f.sk, t.sk] = [t.sk, f.sk];
       } else if (t.c !== id) { t.c = id; }
-      save();
+      saveTeam();
       renderTeam();
     }, false, true);
   }
@@ -803,7 +956,7 @@ const Master = (() => {
     const title = kind === "it" ? `Objet pour ${byId[`c_${t.c}`].name}` : `${i === 0 ? "Rune principale" : "Rune secondaire"} pour ${byId[`c_${t.c}`].name}`;
     openPicker(title, options, (v) => {
       (kind === "it" ? t.it : t.ru)[i] = v;
-      save();
+      saveTeam();
       renderTeam();
     }, !!cur);
   }
@@ -843,7 +996,7 @@ const Master = (() => {
   function publish() {
     const db = Account.db, u = Account.user;
     build();
-    if (!db || !u || !pool) return;
+    if (!db || !u || !pool || served()) return; // avec le serveur, c'est lui qui tient le profil public
     const byR = [0, 0, 0, 0, 0];
     const base = pool.filter((c) => c.type !== "skin");
     for (const c of base) if (s.inv[c.id]) byR[c.r]++;
@@ -922,6 +1075,7 @@ const Master = (() => {
     if (!db || !u) return [];
     const mine = (await db.collection("market").where("seller", "==", u.uid).get()).docs.map((d) => ({ id: d.id, ref: d.ref, ...d.data() }));
     let gained = 0;
+    if (served()) return mine; // le serveur verse l'or au vendeur au moment de l'achat
     for (const l of mine.filter((x) => x.status === "sold" && !x.claimed)) {
       try {
         await db.runTransaction(async (tr) => {
@@ -954,8 +1108,12 @@ const Master = (() => {
         <div id="mk-list" class="mk-list"><div class="m-none">Chargement…</div></div></div>`;
     $("mk-sort").value = mk.sort;
     $("mk-sell").onclick = sellPicker;
-    $("mk-recycle").onclick = () => {
-      const { gold, n } = recycleAll(1);
+    $("mk-recycle").onclick = async () => {
+      let r;
+      if (served()) { try { r = await api("recycle-all", { maxR: 1 }); } catch (e) { return note(e.message); } }
+      else r = recycleAll(1);
+      const { gold, n } = r;
+      if (!$("mk-recycle")) return;
       $("mk-recycle").textContent = n ? `${n} doubles recyclés : +${gold} or` : "Aucun double Commun ou Rare à recycler";
       $("mk-gold").textContent = s.gold;
     };
@@ -1017,7 +1175,7 @@ const Master = (() => {
   function sellPicker() {
     const options = pool.filter((c) => s.inv[c.id]).map((c) => {
       const f = free(c.id);
-      return { c, v: c.id, img: c.type === "champ" ? c.art : c.icon, off: f < 1, search: `${c.name} ${c.champ || ""}`,
+      return { c, v: c.id, img: c.icon || c.art, off: f < 1, search: `${c.name} ${c.champ || ""}`,
         note: f < 1 ? "exemplaire utilisé dans ton équipe" : `${f} exemplaire${f > 1 ? "s" : ""} libre${f > 1 ? "s" : ""} · ${RAR_FR[RAR[c.r]]}` };
     }).sort((a, b) => a.off - b.off || b.c.r - a.c.r || a.c.name.localeCompare(b.c.name));
     openPicker("Quelle carte vendre ?", options, (id) => {
@@ -1035,6 +1193,10 @@ const Master = (() => {
   async function sell(id, price) {
     const db = Account.db, u = Account.user;
     if (!db || free(id) < 1) return;
+    if (served()) {
+      try { await api("sell", { card: id, price }); } catch (e) { note(e.message); }
+      return renderMarket();
+    }
     s.inv[id]--;
     if (!s.inv[id]) delete s.inv[id];
     save();
@@ -1051,6 +1213,10 @@ const Master = (() => {
 
   async function cancelListing(l) {
     if (!l) return;
+    if (served()) {
+      try { await api("cancel", { id: l.id }); } catch (e) { note(e.message); }
+      return renderMarket();
+    }
     try {
       await Account.db.runTransaction(async (tr) => {
         const d = await tr.get(l.ref);
@@ -1067,6 +1233,16 @@ const Master = (() => {
     const u = Account.user;
     if (!l || (s.gold || 0) < l.price) return;
     btn.disabled = true;
+    if (served()) {
+      try {
+        await api("buy", { id: l.id });
+        l.status = "sold";
+        drawListings();
+        $("mk-gold").textContent = s.gold;
+        view(l.card);
+      } catch (e) { note(e.message); renderMarket(); }
+      return;
+    }
     try {
       await Account.db.runTransaction(async (tr) => {
         const d = await tr.get(l.ref);
@@ -1112,7 +1288,12 @@ const Master = (() => {
       </div>`;
     $("m-view").classList.remove("hidden");
     const rb = $("m-view-box").querySelector(".mv-recycle");
-    if (rb) rb.onclick = (e) => { e.stopPropagation(); recycle(id); view(id); renderGrid(); };
+    if (rb) rb.onclick = async (e) => {
+      e.stopPropagation();
+      if (served()) { rb.disabled = true; try { await api("recycle", { id }); } catch (err) { note(err.message); } }
+      else recycle(id);
+      view(id); renderGrid(); renderPacks();
+    };
   }
 
   // image de skin introuvable chez Data Dragon (souvent les skins récents) : on essaie deux adresses de CommunityDragon,
@@ -1152,7 +1333,7 @@ const Master = (() => {
     $("m-all").onclick = revealAll;
     $("m-sound").onclick = () => { ui.mute = !ui.mute; saveUi(); renderSound(); if (!ui.mute) ping(1); };
     renderSound();
-    $("m-again").onclick = () => { if (s.packs > 0) openPack(); };
+    $("m-again").onclick = () => { if (avail() > 0) openPack(); };
     $("m-close").onclick = closeOpening;
     $("m-more").onclick = () => { ui.shown += PAGE * 2; renderGrid(); };
     $("m-search").oninput = (e) => { ui.q = e.target.value.trim(); ui.shown = PAGE; renderGrid(); };
@@ -1180,7 +1361,7 @@ const Master = (() => {
         if (!$("m-view").classList.contains("hidden")) return $("m-view").classList.add("hidden");
         if (!opening) return openPack();
         const next = $("m-reveal").querySelector(".m-slot:not(.shown)");
-        if (next) reveal(next); else if (s.packs > 0) openPack(); else closeOpening();
+        if (next) reveal(next); else if (avail() > 0) openPack(); else closeOpening();
       }
     });
   }
@@ -1190,6 +1371,8 @@ const Master = (() => {
     render() { if (!wired) { wired = true; wireUi(); } render(); },
     get state() { return s; },
     publish: () => publishSoon(),
+    server: !!API,
+    sync,
     setState,
     pick,
     merge,

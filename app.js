@@ -35,7 +35,7 @@ function persist() {
   store.set("flc_progress", progress);
   store.set("flc_custom", custom);
   if (isOnlineUser()) store.set("flc_unsynced", true);
-  if (Account.mode === "user") Account.save({ progress, custom, master: Master.state });
+  if (Account.mode === "user") Account.save(Master.server ? { progress, custom } : { progress, custom, master: Master.state });
 }
 const prefs = Object.assign(
   { mode: "champ", all: true, lane: [], cls: [], key: [], tree: [], slot: [], itype: ["legendary", "boots"], irole: [], icon: false, name: false, learn: "discover" },
@@ -1096,9 +1096,11 @@ function onRemote(data) {
   for (const [id, v] of Object.entries(data.custom || {})) if (!(id in custom)) { custom[id] = v; gotProgress = true; }
   if (Object.keys(custom).some((id) => !(data.custom || {})[id])) push = true;
   if (gotProgress) { store.set("flc_progress", progress); store.set("flc_custom", custom); if (prefs.mode !== "master" && cards.champ.length) updateStats(); }
-  const m = Master.merge(Master.state, data.master);
-  if (m && !Master.same(m, Master.state)) { Master.setState(m); store.set("flc_master", m); }
-  if (m && !Master.same(m, data.master)) push = true;
+  if (!Master.server) { // avec le serveur du jeu, la collection ne passe plus par ce document
+    const m = Master.merge(Master.state, data.master);
+    if (m && !Master.same(m, Master.state)) { Master.setState(m); store.set("flc_master", m); }
+    if (m && !Master.same(m, data.master)) push = true;
+  }
   if (push) persist();
 }
 
@@ -1135,7 +1137,8 @@ async function onAccountChange(mode) {
     replaceObj(custom, l.custom);
     // cartes ouvertes en invité avant de se connecter : elles iront sur le compte s'il n'a pas encore de collection
     const fromGuest = takeGuest();
-    Master.setState(l.master || fromGuest);
+    const srv = Master.server; // collection tenue par le serveur du jeu : ici on n'affiche que sa copie en attendant
+    Master.setState(srv ? l.master : l.master || fromGuest);
     store.set("flc_owner", uid);
     lastMode = mode;
     renderAccount();
@@ -1149,14 +1152,19 @@ async function onAccountChange(mode) {
     // shown = collection affichée, avec les packs ouverts pendant le chargement du compte (sinon ils seraient perdus)
     const shown = Master.state;
     const mine = l.master || !fromGuest ? shown : null;
-    let master = hasCloud ? Master.merge(mine, cloud.master) : mine;
-    if (!failed && fromGuest) {
+    let master = srv ? null : hasCloud ? Master.merge(mine, cloud.master) : mine;
+    if (srv) {
+      Master.sync(fromGuest ? fromGuest.opened : 0).then((done) => {
+        if (done && fromGuest) { localStorage.removeItem("flc_master_guest"); guestCarry = null; }
+      });
+    }
+    if (!failed && fromGuest && !srv) {
       const cur = Master.pick(master, null);
       if (!cur || !(cur.opened > 0)) { master = shown; store.set("flc_master", master); } // compte neuf : on lui donne la collection invité
       localStorage.removeItem("flc_master_guest");
       guestCarry = null;
     }
-    if (!failed) Master.setState(master);
+    if (!failed && !srv) Master.setState(master);
     if (!failed) Account.watch(onRemote); // suit les changements faits sur les autres appareils
     if (failed) {
       // compte injoignable : on garde la copie locale, elle partira au prochain enregistrement

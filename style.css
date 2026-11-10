@@ -952,3 +952,9 @@ body.mode-master .stage, body.mode-master #filters, body.mode-master #dl, body.m
 .m-slot.is-skin .m-down::before { border-color: #cdfafa88; }
 .m-slot.is-skin .m-down-logo { color: var(--hex-light); text-shadow: 0 0 14px var(--hex); }
 .m-slot.is-skin:not(.shown) .m-down::after { animation: m-glow 1.2s ease-in-out infinite alternate; box-shadow: 0 0 36px var(--hex), 0 0 70px #0ac8b966; }
+
+/* message court du serveur du jeu (pas de pack, pas d'internet…) */
+#m-note { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); z-index: 400; max-width: min(92vw, 520px);
+  padding: 12px 18px; border-radius: 12px; background: #1c2333; color: #f1f3f9; border: 1px solid #c8aa6e; box-shadow: 0 8px 30px rgba(0,0,0,.5);
+  font-size: 15px; text-align: center; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
+#m-note.on { opacity: 1; transform: translate(-50%, 0); }
