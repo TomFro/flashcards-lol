@@ -216,20 +216,19 @@ const Master = (() => {
     });
     res.sort((a, b) => (a.c.type === "skin") - (b.c.type === "skin") || a.c.r - b.c.r);
     // pack pas encore regardé : gardé pour le remontrer si la page se recharge pendant l'ouverture
-    s.unseen = { t: title || "", c: res.map((x) => [x.c.id, x.isNew ? 1 : 0, x.n]) };
+    // (gardé sur cet appareil seulement : un autre appareil n'a pas à rouvrir ce pack)
+    store.set("flc_master_unseen", { t: title || "", c: res.map((x) => [x.c.id, x.isNew ? 1 : 0, x.n]) });
     save();
     showOpening(res, title);
   }
   function resumeOpening() {
-    const u = s.unseen;
+    const u = store.get("flc_master_unseen", null);
     const res = ((u && u.c) || []).map(([id, isNew, n]) => byId[id] && { c: byId[id], isNew: !!isNew, n }).filter(Boolean);
-    if (!res.length) { delete s.unseen; return; }
+    if (!res.length) { localStorage.removeItem("flc_master_unseen"); return; }
     showOpening(res, "Ton dernier pack, que tu n'avais pas fini de regarder");
   }
   function seen() {
-    if (!s.unseen) return;
-    delete s.unseen;
-    save();
+    try { localStorage.removeItem("flc_master_unseen"); } catch {}
   }
   function buySkin() {
     build();
@@ -252,7 +251,31 @@ const Master = (() => {
   }
 
   // ---------- Enregistrement ----------
+  // hist : petites étiquettes ajoutées à chaque enregistrement. Elles permettent de savoir si une collection
+  // est la suite d'une autre (même appareil, ou appareil à jour) ou si deux appareils ont joué chacun de leur côté.
+  const tok = () => Math.random().toString(36).slice(2, 8);
+  const lastTok = (x) => (x && x.hist && x.hist.length ? x.hist[x.hist.length - 1] : null);
+  function merge(a, b) {
+    a = valid(a); b = valid(b);
+    if (!a || !b) return a || b;
+    const la = lastTok(a), lb = lastTok(b);
+    if (la && la === lb) return a;
+    if (la && (b.hist || []).includes(la)) return b; // b est la suite de a
+    if (lb && (a.hist || []).includes(lb)) return a; // a est la suite de b
+    // deux appareils ont joué chacun de leur côté : on garde toutes les cartes des deux
+    const [hi, lo] = (b.opened || 0) > (a.opened || 0) ? [b, a] : [a, b];
+    const m = JSON.parse(JSON.stringify(hi));
+    m.inv ||= {}; m.at ||= {};
+    for (const [id, n] of Object.entries(lo.inv || {})) {
+      if (n > (m.inv[id] || 0)) { m.inv[id] = n; if (!m.at[id] && lo.at && lo.at[id]) m.at[id] = lo.at[id]; }
+    }
+    m.gold = Math.max(a.gold || 0, b.gold || 0);
+    m.hist = [...(hi.hist || []).slice(-150), ...(lo.hist || []).slice(-40), tok()];
+    return m;
+  }
+
   function save() {
+    s.hist = [...(s.hist || []).slice(-199), tok()];
     if (isGuest()) { store.set("flc_master_guest", s); return; } // invité : gardé à part, passé au compte à l'inscription
     store.set("flc_master", s);
     if (isOnlineUser()) store.set("flc_unsynced", true);
@@ -413,7 +436,7 @@ const Master = (() => {
       renderPacks();
       if (s.packs !== before) save();
     }, 1000);
-    if (s.unseen && !opening) resumeOpening();
+    if (!opening && store.get("flc_master_unseen", null)) resumeOpening();
   }
 
   // ---------- Sons ----------
@@ -1156,6 +1179,8 @@ const Master = (() => {
     publish: () => publishSoon(),
     setState,
     pick,
+    merge,
+    same: (a, b) => !!a && !!b && lastTok(a) === lastTok(b),
     reset() { setState(null); },
     refreshDescs() { pool = null; byTypeRar = {}; },
   };

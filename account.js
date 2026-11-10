@@ -127,6 +127,17 @@ window.Account = (() => {
     return snap.exists ? snap.data() : null;
   }
 
+  // Suit le document du compte : cb reçoit les données à chaque changement venu du serveur (autre appareil)
+  let unwatch = null;
+  function watch(cb) {
+    if (unwatch) { unwatch(); unwatch = null; }
+    if (!cb || !user || !db) return;
+    unwatch = db.collection("users").doc(user.uid).onSnapshot((snap) => {
+      if (snap.metadata.hasPendingWrites || !snap.exists) return; // nos propres écritures pas encore confirmées
+      cb(snap.data());
+    }, (e) => console.warn("Suivi du compte impossible", e));
+  }
+
   // Enregistre avec un petit délai pour grouper les réponses rapides
   function save(data) {
     if (!user || !db) return;
@@ -145,7 +156,7 @@ window.Account = (() => {
   }
 
   return {
-    init, signIn, signInEmail, signUpEmail, resetPassword, signOut, load, save,
+    init, signIn, signInEmail, signUpEmail, resetPassword, signOut, load, save, watch,
     get mode() { return mode; },
     get user() { return user; },
     get restoring() { return restoring; },

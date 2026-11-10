@@ -355,6 +355,7 @@ function srs(id) {
 // Calcule le nouvel état après une réponse : 0 À revoir, 1 Difficile, 2 Bien, 3 Facile
 function schedule(old, g, now = Date.now()) {
   const p = old ? { ...old } : { i: 0, e: 2.5, d: now, r: 0, l: 0, s: 0 };
+  p.t = now; // dernière réponse, pour fusionner deux appareils
   const learning = p.i < 1;
   if (g === 0) {
     if (!learning) p.l++;
@@ -1079,6 +1080,28 @@ function openEmailLogin() {
 
 // flc_owner : compte à qui appartient la progression gardée dans ce navigateur
 // flc_unsynced : des réponses données hors ligne n'ont pas encore été envoyées au compte
+// Un autre appareil a enregistré quelque chose sur le compte : on le fusionne avec ce qu'on a ici,
+// pour que le téléphone et l'ordinateur restent synchronisés même si la page reste ouverte.
+function onRemote(data) {
+  if (Account.mode !== "user" || !data) return;
+  let push = false, gotProgress = false;
+  const newer = (p, q) => (p.t || 0) > (q.t || 0) || ((p.t || 0) === (q.t || 0) && (p.r || 0) > (q.r || 0));
+  for (const [id, p] of Object.entries(data.progress || {})) {
+    if (!progress[id] || newer(p, progress[id])) { progress[id] = p; gotProgress = true; }
+  }
+  for (const id of Object.keys(progress)) {
+    const p = (data.progress || {})[id];
+    if (!p || newer(progress[id], p)) push = true;
+  }
+  for (const [id, v] of Object.entries(data.custom || {})) if (!(id in custom)) { custom[id] = v; gotProgress = true; }
+  if (Object.keys(custom).some((id) => !(data.custom || {})[id])) push = true;
+  if (gotProgress) { store.set("flc_progress", progress); store.set("flc_custom", custom); if (prefs.mode !== "master" && cards.champ.length) updateStats(); }
+  const m = Master.merge(Master.state, data.master);
+  if (m && !Master.same(m, Master.state)) { Master.setState(m); store.set("flc_master", m); }
+  if (m && !Master.same(m, data.master)) push = true;
+  if (push) persist();
+}
+
 // cartes ouvertes en invité, gardées en mémoire le temps de les passer au compte (la connexion peut prévenir deux fois)
 let guestCarry = null;
 function takeGuest() {
@@ -1088,9 +1111,10 @@ function takeGuest() {
 }
 async function onAccountChange(mode) {
   const local = () => ({ progress: store.get("flc_progress", {}), custom: store.get("flc_custom", {}), master: store.get("flc_master", null) });
+  if (mode !== "user") Account.watch(null);
   if (mode === "guest") {
     if (lastMode === "user") { // déconnexion : on ne laisse rien
-      ["flc_progress", "flc_custom", "flc_owner", "flc_unsynced", "flc_master", "flc_master_guest"].forEach((k) => localStorage.removeItem(k));
+      ["flc_progress", "flc_custom", "flc_owner", "flc_unsynced", "flc_master", "flc_master_guest", "flc_master_unseen"].forEach((k) => localStorage.removeItem(k));
     }
     guestCarry = null;
     replaceObj(progress, {});
@@ -1125,7 +1149,7 @@ async function onAccountChange(mode) {
     // shown = collection affichée, avec les packs ouverts pendant le chargement du compte (sinon ils seraient perdus)
     const shown = Master.state;
     const mine = l.master || !fromGuest ? shown : null;
-    let master = hasCloud ? Master.pick(mine, cloud.master) : mine;
+    let master = hasCloud ? Master.merge(mine, cloud.master) : mine;
     if (!failed && fromGuest) {
       const cur = Master.pick(master, null);
       if (!cur || !(cur.opened > 0)) { master = shown; store.set("flc_master", master); } // compte neuf : on lui donne la collection invité
@@ -1133,6 +1157,7 @@ async function onAccountChange(mode) {
       guestCarry = null;
     }
     if (!failed) Master.setState(master);
+    if (!failed) Account.watch(onRemote); // suit les changements faits sur les autres appareils
     if (failed) {
       // compte injoignable : on garde la copie locale, elle partira au prochain enregistrement
     } else if (hasCloud && unsynced) {
