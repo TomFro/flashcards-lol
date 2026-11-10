@@ -132,7 +132,9 @@ const Master = (() => {
   async function checkPool() {
     build();
     // sans les vraies catégories des skins (CommunityDragon), on n'envoie rien : la liste serait moins bonne que celle en place
-    if (!online() || !srv.admin || !pool || !skinTiers || !skinTiers.map || !Object.keys(skinTiers.map).length) return;
+    // (sauf si le serveur n'a encore aucune liste : mieux vaut une liste qu'aucune)
+    const tiersOk = skinTiers && skinTiers.map && Object.keys(skinTiers.map).length;
+    if (!online() || !srv.admin || !pool || (!tiersOk && srv.poolHash)) return;
     const { list, hash } = poolList();
     if (hash === srv.poolHash || hash === srv.sent) return;
     srv.sent = hash;
