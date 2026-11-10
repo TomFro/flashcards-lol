@@ -564,7 +564,8 @@ const Master = (() => {
       recent: (a, b) => (s.at[b.id] || 0) - (s.at[a.id] || 0) || b.r - a.r || byName(a, b),
       type: (a, b) => a.type.localeCompare(b.type) || (a.champ || "").localeCompare(b.champ || "") || "PQWER".indexOf(a.key) - "PQWER".indexOf(b.key) || byName(a, b),
     };
-    return list.sort(sorts[ui.sort] || sorts.rarity);
+    // filtre « Récentes » : toujours de la plus récente à la plus ancienne, quel que soit le tri choisi
+    return list.sort(ui.own === "new" ? sorts.recent : sorts[ui.sort] || sorts.rarity);
   }
 
   function renderGrid() {
