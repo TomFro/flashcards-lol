@@ -1016,15 +1016,19 @@ const Master = (() => {
   const needOnline = (what) => `<div class="m-none">${isGuest() ? `Connecte-toi pour ${what}.` : `Il faut être connecté à internet pour ${what}.`}</div>`;
 
   // ---------- Joueurs ----------
-  let players = null, viewing = null;
+  let players = null, viewing = null, hiddenBots = 0;
+  const isBot = (p) => /^\s*bot(?![a-zà-ÿ])/i.test(String(p.name || ""));
   async function renderPlayers() {
     const box = $("m-players");
     if (!Account.db) { box.innerHTML = needOnline("voir les autres joueurs"); return; }
     if (viewing) return renderProfile(viewing);
     box.innerHTML = `<div class="m-panel"><h2>Joueurs</h2><div id="m-plist" class="m-plist"><div class="m-none">Chargement…</div></div></div>`;
     try {
-      const snap = await Account.db.collection("profiles").orderBy("updatedAt", "desc").limit(50).get();
-      players = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+      const snap = await Account.db.collection("profiles").orderBy("updatedAt", "desc").limit(150).get();
+      // comptes de bots (pseudo qui commence par « Bot ») : pas affichés dans la liste
+      const all = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+      players = all.filter((p) => !isBot(p)).slice(0, 50);
+      hiddenBots = all.length - all.filter((p) => !isBot(p)).length;
     } catch (e) { console.error(e); if ($("m-plist")) $("m-plist").innerHTML = loadError(e); return; }
     if (ui.tab !== "players" || viewing) return;
     const me = Account.user && Account.user.uid;
@@ -1034,7 +1038,7 @@ const Master = (() => {
         ${p.photo ? `<img src="${esc(p.photo)}" alt="" onerror="this.remove()">` : `<i class="m-avatar">${esc((p.name || "?")[0])}</i>`}
         <span><b>${esc(p.name)}${p.uid === me ? " (toi)" : ""}</b><em>${p.owned || 0} / ${p.total || pool.length} cartes · ${(p.byR || [])[4] || 0} mythique${((p.byR || [])[4] || 0) > 1 ? "s" : ""} · équipe niveau ${lvl}</em></span>
       </button>`;
-    }).join("") : `<div class="m-none">Personne pour l'instant.</div>`;
+    }).join("") + (hiddenBots ? `<div class="m-none">${hiddenBots} compte${hiddenBots > 1 ? "s" : ""} de bot caché${hiddenBots > 1 ? "s" : ""}</div>` : "") : `<div class="m-none">Personne pour l'instant.</div>`;
     $("m-plist").querySelectorAll(".m-player").forEach((b) => (b.onclick = () => { viewing = players.find((p) => p.uid === b.dataset.uid); renderProfile(viewing); }));
   }
 
