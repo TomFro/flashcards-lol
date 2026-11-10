@@ -86,13 +86,19 @@ const Master = (() => {
     }
     for (const c of cards.champAll) {
       const raw = champRaw[c.champId];
-      for (const k of (raw && raw.skins) || []) {
+      const skins = (raw && raw.skins) || [];
+      const byName = Object.fromEntries(skins.map((k) => [k.name.trim().toLowerCase(), k.num]));
+      for (const k of skins) {
         if (!k.num) continue; // skin de base
         const known = skinTiers && skinTiers.map ? skinTiers.map[k.id] : undefined;
         const r = known ?? (/prestige/i.test(k.name) ? 3 : 0);
+        // variante de couleur, ex. « Nidalee fleur spirituelle (émeraude) » : Riot n'a pas d'image à part, on prend celle du skin d'origine
+        const v = k.name.match(/^(.*\S)\s*\(([^)]+)\)$/);
+        const parent = v ? byName[v[1].trim().toLowerCase()] : undefined;
+        const artNum = parent || k.num;
         pool.push({
-          id: `k_${c.champId}_${k.num}`, type: "skin", r, name: k.name, sub: c.champ, champ: c.champ, champId: c.champId, num: k.num,
-          art: `${DD}/cdn/img/champion/loading/${c.champId}_${k.num}.jpg`, desc: "",
+          id: `k_${c.champId}_${k.num}`, type: "skin", r, name: k.name, sub: parent ? `${c.champ} · variante ${v[2]}` : c.champ, champ: c.champ, champId: c.champId, num: k.num,
+          art: `${DD}/cdn/img/champion/loading/${c.champId}_${artNum}.jpg`, desc: "",
           why: known != null ? `Catégorie de Riot : ${SKIN_TIER_FR[r]}` : "Catégorie de Riot pas encore chargée : rangé d'après son nom",
         });
       }
@@ -315,6 +321,7 @@ const Master = (() => {
         </div>
         ${n > 1 ? `<div class="mc-count">×${n}</div>` : ""}
         ${isNew ? `<div class="mc-new">Nouvelle !</div>` : ""}
+        ${c.type === "skin" ? `<div class="mc-skintag">Skin</div>` : ""}
       </div>
     </div>`;
   }
@@ -503,8 +510,8 @@ const Master = (() => {
     const box = $("m-opening");
     box.classList.remove("hidden");
     $("m-reveal").innerHTML = res.map((x, i) =>
-      `<div class="m-slot r-${RAR[x.c.r]}" data-i="${i}" style="--d:${i * 70}ms"><div class="m-flip">
-        <div class="m-face m-down"><div class="m-down-logo">LoL<br>Master</div></div>
+      `<div class="m-slot r-${RAR[x.c.r]}${x.c.type === "skin" ? " is-skin" : ""}" data-i="${i}" style="--d:${i * 70}ms"><div class="m-flip">
+        <div class="m-face m-down"><div class="m-down-logo">${x.c.type === "skin" ? "Skin<br>Hextech" : "LoL<br>Master"}</div></div>
         <div class="m-face m-up">${cardHtml(x.c, { n: x.n, back: true, isNew: x.isNew })}</div>
       </div></div>`).join("");
     $("m-reveal").querySelectorAll(".m-slot").forEach((el) => (el.onclick = () => reveal(el)));
@@ -1122,13 +1129,19 @@ const Master = (() => {
         `${DD}/cdn/img/champion/loading/${m[1]}_0.jpg`,
       ]);
       img.src = `https://cdn.communitydragon.org/latest/champion/${raw.key}/splash-art/centered/skin/${m[2]}`;
+      watchdog(img);
     } else if (img.dataset.fb) {
       const rest = JSON.parse(img.dataset.fb);
       const nextSrc = rest.shift();
       if (rest.length) img.dataset.fb = JSON.stringify(rest); else delete img.dataset.fb;
-      if (nextSrc) img.src = nextSrc;
+      if (nextSrc) { img.src = nextSrc; watchdog(img); }
     }
   }, true);
+  // une image de secours qui ne répond pas du tout : au bout de 6 s on passe à la suivante
+  function watchdog(img) {
+    const src = img.src;
+    setTimeout(() => { if (img.src === src && !img.naturalWidth && img.dataset.fb) img.dispatchEvent(new Event("error")); }, 6000);
+  }
 
   function wireUi() {
     $("m-open").onclick = openPack;
