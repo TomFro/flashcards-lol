@@ -566,9 +566,9 @@ body.mode-master .stage, body.mode-master #filters, body.mode-master #dl, body.m
 .mc:hover .mc-frame { transform: translateY(-3px); }
 .r-legendary .mc-frame, .r-mythic .mc-frame { box-shadow: 0 0 22px color-mix(in srgb, var(--rc) 65%, transparent), inset 0 0 0 1px #000; }
 .r-mythic .mc-frame { border-image: linear-gradient(135deg, #ff4d6d, #ffb347, #ffe66d, #6dffb3, #4dc3ff, #c46dff, #ff4d6d) 1; }
-.r-mythic .mc-frame::after { content: ""; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: overlay;
-  background: linear-gradient(115deg, transparent 30%, #ffffff55 45%, transparent 60%); background-size: 250% 100%; animation: mc-shine 3.5s linear infinite; }
-@keyframes mc-shine { from { background-position: 150% 0; } to { background-position: -100% 0; } }
+.r-mythic .mc-frame::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 250%; pointer-events: none; mix-blend-mode: overlay;
+  background: linear-gradient(115deg, transparent 40%, #ffffff55 50%, transparent 60%); animation: mc-shine 3.5s linear infinite; will-change: transform; }
+@keyframes mc-shine { from { transform: translateX(-2%); } to { transform: translateX(-58%); } }
 .mc-art { position: relative; height: 55%; flex: none; overflow: hidden; display: grid; place-items: center;
   background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--rc) 30%, transparent), transparent 70%), #091428; }
 .mc-champ { width: 100%; height: 100%; object-fit: cover; object-position: center 18%; }
@@ -600,13 +600,14 @@ body.mode-master .stage, body.mode-master #filters, body.mode-master #dl, body.m
 }
 
 /* ouverture d'un pack */
-#m-opening, #m-view { position: fixed; inset: 0; z-index: 50; background: #010a13f0; backdrop-filter: blur(6px);
+/* pas de backdrop-filter ici : sur grand écran, flouter tout l'arrière-plan à chaque image faisait ramer les animations */
+#m-opening, #m-view { position: fixed; inset: 0; z-index: 50; background: #010a13f5; overflow-x: hidden;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 20px; overflow-y: auto; }
 #m-summary { font-family: var(--title); font-size: 18px; letter-spacing: 2px; text-transform: uppercase; color: var(--gold1); text-align: center; }
 #m-reveal { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
 .m-slot { width: 190px; aspect-ratio: 5 / 7.4; perspective: 1000px; cursor: pointer; animation: m-deal .45s both; animation-delay: var(--d); }
 @keyframes m-deal { from { opacity: 0; transform: translateY(40px) scale(.85); } }
-.m-flip { position: relative; width: 100%; height: 100%; transition: transform .6s cubic-bezier(.3, .7, .3, 1.2); transform-style: preserve-3d; }
+.m-flip { position: relative; width: 100%; height: 100%; transition: transform .6s cubic-bezier(.3, .7, .3, 1.2); transform-style: preserve-3d; will-change: transform; }
 .m-slot.shown .m-flip { transform: rotateY(180deg); }
 .m-face { position: absolute; inset: 0; backface-visibility: hidden; }
 .m-up { transform: rotateY(180deg); }
@@ -616,10 +617,16 @@ body.mode-master .stage, body.mode-master #filters, body.mode-master #dl, body.m
 .m-down::before { content: ""; position: absolute; inset: 7px; border: 1px solid #c8aa6e66; }
 .m-slot:not(.shown):hover .m-flip { transform: translateY(-6px); }
 /* une carte rare se devine avant d'être retournée : halo de sa couleur */
-.m-slot.r-epic:not(.shown) .m-down, .m-slot.r-legendary:not(.shown) .m-down, .m-slot.r-mythic:not(.shown) .m-down { animation: m-glow 1.4s ease-in-out infinite alternate; }
-@keyframes m-glow { from { box-shadow: 0 0 10px var(--rc); } to { box-shadow: 0 0 36px var(--rc), 0 0 70px color-mix(in srgb, var(--rc) 40%, transparent); } }
-.m-slot.shown.r-legendary, .m-slot.shown.r-mythic { animation: m-burst .8s both; }
-@keyframes m-burst { 40% { filter: brightness(1.8) drop-shadow(0 0 30px var(--rc)); } }
+/* (on anime l'opacité d'un halo fixe plutôt que l'ombre elle-même : beaucoup moins coûteux) */
+.m-down::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  box-shadow: 0 0 36px var(--rc), 0 0 70px color-mix(in srgb, var(--rc) 40%, transparent); }
+.m-slot.r-epic:not(.shown) .m-down::after, .m-slot.r-legendary:not(.shown) .m-down::after, .m-slot.r-mythic:not(.shown) .m-down::after { animation: m-glow 1.4s ease-in-out infinite alternate; will-change: opacity; }
+@keyframes m-glow { from { opacity: .25; } to { opacity: 1; } }
+.m-slot { position: relative; }
+.m-slot::after { content: ""; position: absolute; inset: -30px; pointer-events: none; opacity: 0; mix-blend-mode: screen;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--rc) 80%, transparent), transparent); }
+.m-slot.shown.r-legendary::after, .m-slot.shown.r-mythic::after { animation: m-burst .9s ease-out; }
+@keyframes m-burst { 35% { opacity: 1; } }
 .m-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 .m-actions .btn { font-size: 13px; padding: 10px 24px; }
 #m-close { border-color: var(--gold4); background: var(--panel); }
