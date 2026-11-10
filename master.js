@@ -1017,7 +1017,7 @@ const Master = (() => {
 
   // ---------- Joueurs ----------
   let players = null, viewing = null, hiddenBots = 0;
-  const isBot = (p) => /^\s*bot(?![a-zà-ÿ])/i.test(String(p.name || ""));
+  const isBot = (p) => /^\s*bot(?![a-zà-ÿ])/i.test(String(p.name || "")) || String(p.name || "").trim() === "Joueur";
   async function renderPlayers() {
     const box = $("m-players");
     if (!Account.db) { box.innerHTML = needOnline("voir les autres joueurs"); return; }

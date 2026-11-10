@@ -110,7 +110,7 @@ function firestore(sa) {
     // writes : [{ path, data, mask?, prev }] ; prev = updateTime attendu, ou null si le document ne doit pas exister.
     // Tout passe ou rien ne passe. Renvoie false si quelqu'un a modifié un document entre-temps.
     async commit(writes) {
-      const res = await call(`${base}:commit`, { method: "POST", body: JSON.stringify({ writes: writes.map((w) => ({
+      const res = await call(`${base}:commit`, { method: "POST", body: JSON.stringify({ writes: writes.map((w) => w.del ? { delete: `${root}/${w.path}` } : ({
         update: { name: `${root}/${w.path}`, fields: toFields(w.data) },
         ...(w.mask ? { updateMask: { fieldPaths: w.mask } } : {}),
         ...(w.prev === undefined ? {} : { currentDocument: w.prev === null ? { exists: false } : { updateTime: w.prev } }),
@@ -250,6 +250,23 @@ const ADMIN = {
     await db.commit([{ path: "config/pool", data: { json: JSON.stringify(list), hash: String(a.hash || "").slice(0, 64), n: list.length, updatedAt: new Date() } }]);
     await loadPool(db, true);
     return { result: { n: list.length } };
+  },
+  // supprime les comptes de jeu dont le pseudo est exactement `name` (bots) : collection, progression, ventes en cours.
+  // Sans confirm:true, ne supprime rien et renvoie seulement la liste de ce qui serait supprimé.
+  "purge-name": async (db, who, a) => {
+    const name = String(a.name || "");
+    if (!name.trim()) throw new HttpError(400, "bad-name", "Donne un pseudo.");
+    const found = (await db.where("profiles", "name", name)).map((p) => ({ uid: p.path.split("/")[1], opened: p.data.opened || 0, owned: p.data.owned || 0 }))
+      .filter((p) => p.uid && p.uid !== who.uid);
+    if (a.confirm !== true) return { result: { dry: true, n: found.length, list: found } };
+    const writes = [];
+    for (const p of found) {
+      for (const l of await db.where("market", "seller", p.uid)) if (l.data.status === "open") writes.push({ path: l.path, del: true });
+      writes.push({ path: `profiles/${p.uid}`, del: true }, { path: `users/${p.uid}`, del: true });
+      wait.delete(p.uid);
+    }
+    for (let i = 0; i < writes.length; i += 400) await db.commit(writes.slice(i, i + 400));
+    return { result: { deleted: found.length } };
   },
   // remet à zéro la collection d'un joueur (tricheur, test)
   "admin-reset": async (db, who, a) => {

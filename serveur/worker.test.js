@@ -32,11 +32,13 @@ globalThis.fetch = async (url, init = {}) => {
   if (url.endsWith(":commit")) {
     const body = JSON.parse(init.body);
     for (const w of body.writes) {
+      if (w.delete) continue;
       const path = w.update.name.split("/documents/")[1], cur = docs.get(path);
       const pre = w.currentDocument;
       if (pre && ("exists" in pre ? !!cur !== pre.exists : !cur || cur.updateTime !== pre.updateTime)) return reply(400, { error: { status: "FAILED_PRECONDITION" } });
     }
     for (const w of body.writes) {
+      if (w.delete) { docs.delete(w.delete.split("/documents/")[1]); continue; }
       const path = w.update.name.split("/documents/")[1], cur = docs.get(path);
       const fields = w.updateMask ? { ...(cur ? cur.fields : {}), ...Object.fromEntries(w.updateMask.fieldPaths.map((k) => [k, w.update.fields[k]])) } : w.update.fields;
       docs.set(path, { fields, updateTime: stamp() }); writes++;
@@ -183,4 +185,18 @@ test("contrôle d'installation", async () => {
   const ko = await (await worker.fetch(new Request("https://srv.test/"), {})).json();
   assert.equal(ko.ok, false); assert.equal(ko.service_account, false);
   assert.ok(!JSON.stringify(ok).includes("PRIVATE"));
+});
+
+test("l'administrateur supprime les comptes « Joueur » (d'abord la liste, puis pour de vrai)", async () => {
+  await call("j1", { op: "open" }, { name: "Joueur" });
+  await call("j2", { op: "state" }, { name: "Joueur" });
+  await call("j3", { op: "state" }, { name: "Joueur 2" });
+  const admin = { email: "admin@site.fr", email_verified: true };
+  assert.equal((await call("j1", { op: "purge-name", name: "Joueur" })).status, 403);
+  const dry = await call("tom", { op: "purge-name", name: "Joueur" }, admin);
+  assert.equal(dry.result.dry, true); assert.deepEqual(dry.result.list.map((p) => p.uid).sort(), ["j1", "j2"]);
+  assert.ok(docs.has("profiles/j1"), "rien supprimé sans confirm");
+  const r = await call("tom", { op: "purge-name", name: "Joueur", confirm: true }, admin);
+  assert.equal(r.result.deleted, 2);
+  assert.ok(!docs.has("profiles/j1") && !docs.has("profiles/j2") && docs.has("profiles/j3"));
 });
