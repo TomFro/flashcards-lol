@@ -622,6 +622,9 @@ body.mode-master .stage, body.mode-master #filters, body.mode-master #dl, body.m
   box-shadow: 0 0 36px var(--rc), 0 0 70px color-mix(in srgb, var(--rc) 40%, transparent); }
 .m-slot.r-epic:not(.shown) .m-down::after, .m-slot.r-legendary:not(.shown) .m-down::after, .m-slot.r-mythic:not(.shown) .m-down::after { animation: m-glow 1.4s ease-in-out infinite alternate; will-change: opacity; }
 @keyframes m-glow { from { opacity: .25; } to { opacity: 1; } }
+/* Rare : halo bleu aussi, plus discret, pour garder l'écart avec Épique et au-dessus */
+.m-slot.r-rare:not(.shown) .m-down::after { animation: m-glow-soft 1.6s ease-in-out infinite alternate; will-change: opacity; }
+@keyframes m-glow-soft { from { opacity: .15; } to { opacity: .6; } }
 .m-slot { position: relative; }
 .m-slot::after { content: ""; position: absolute; inset: -30px; pointer-events: none; opacity: 0; mix-blend-mode: screen;
   background: radial-gradient(closest-side, color-mix(in srgb, var(--rc) 80%, transparent), transparent); }
