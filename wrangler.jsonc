@@ -1,0 +1,9 @@
+// Réglages du Worker Cloudflare « flashcards-lol » (relié à ce dépôt GitHub) :
+// à chaque envoi sur main, Cloudflare redéploie le serveur du jeu, et pas le site.
+// Le site lui-même reste sur GitHub Pages. Les secrets (SERVICE_ACCOUNT, ADMIN_EMAIL) restent dans Cloudflare.
+{
+  "name": "flashcards-lol",
+  "main": "serveur/worker.bundle.js",
+  "compatibility_date": "2026-11-01",
+  "keep_vars": true
+}
