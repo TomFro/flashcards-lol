@@ -111,6 +111,38 @@ test("équipe : on ne peut équiper que ce qu'on possède, un exemplaire = un ch
   assert.equal(team.jungle.c, null);
 });
 
+test("joueurs pro : très rares (≈ 1 pack sur 500), jamais sans pro dans la liste", () => {
+  const withPros = G.indexPool([...list, ...Array.from({ length: 50 }, (_, i) => [`p_pro${i}`, i % 5])]);
+  const s = G.fresh(0), rand = seeded(7);
+  let pros = 0, packs = 0;
+  for (; packs < 50000; packs++) {
+    s.packs = 1;
+    for (const c of G.openPack(s, withPros, 0, rand).cards) if (c.id.startsWith("p_")) pros++;
+  }
+  const per = packs / pros;
+  assert.ok(per > 350 && per < 700, `1 joueur pro tous les ${per.toFixed(0)} packs`);
+  // sans joueurs pro dans la liste du serveur : jamais de carte inventée
+  const s2 = G.fresh(0), r2 = seeded(8);
+  for (let i = 0; i < 3000; i++) { s2.packs = 1; for (const c of G.openPack(s2, P, 0, r2).cards) assert.ok(!c.id.startsWith("p_")); }
+});
+
+test("équipe : un joueur pro possédé, sur un seul poste, et il compte comme utilisé", () => {
+  const s = G.fresh(0);
+  s.inv = { c_C1: 1, c_C2: 1, c_C3: 1, p_faker: 1, p_chovy: 2 };
+  const { team } = G.setTeam(s, {
+    top: { c: "C1", it: [], ru: [], pro: "p_faker" },
+    mid: { c: "C2", it: [], ru: [], pro: "p_faker" },    // déjà en top
+    adc: { c: "C3", it: [], ru: [], pro: "p_ruler" },    // pas possédé
+    jungle: { c: null, it: [], ru: [], pro: "p_chovy" }, // pas de champion
+  });
+  assert.equal(team.top.pro, "p_faker");
+  assert.equal(team.mid.pro, undefined);
+  assert.equal(team.adc.pro, undefined);
+  assert.equal(team.jungle.pro, undefined);
+  assert.equal(G.free(s, "p_faker"), 0);
+  assert.equal(G.free(s, "p_chovy"), 2);
+});
+
 test("marché : la carte quitte le vendeur, l'or passe de l'acheteur au vendeur, une seule fois", () => {
   const a = G.fresh(0), b = G.fresh(0);
   a.inv = { c_C4: 1 };

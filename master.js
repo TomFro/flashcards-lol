@@ -11,12 +11,19 @@ const Master = (() => {
   const RECYCLE = [5, 15, 60, 250, 1000];       // or rendu en recyclant un double, selon la rareté
   const V = 2;                                  // changer ce numéro remet toutes les collections à zéro
   const PITY_LEG = 50;                          // au pire, une Légendaire (ou mieux) tous les 50 packs
-  const TYPES = { champ: "Champion", spell: "Sort", item: "Objet", rune: "Rune", skin: "Skin" };
-  const TYPES_PL = { champ: "Champions", spell: "Sorts", item: "Objets", rune: "Runes", skin: "Skins" };
+  const TYPES = { champ: "Champion", spell: "Sort", item: "Objet", rune: "Rune", skin: "Skin", pro: "Joueur pro" };
+  const TYPES_PL = { champ: "Champions", spell: "Sorts", item: "Objets", rune: "Runes", skin: "Skins", pro: "Joueurs pro" };
   // skins : jamais dans les packs normaux. Un pack sur 10 est spécial (6e carte = un skin), et on peut en acheter en or.
   const SPECIAL_EVERY = 10, SKIN_PRICE = 200;
   const SKIN_ODDS = [60, 28, 9, 2.5, 0.5];      // chances de rareté pour chaque skin tiré
   const SKIN_IN_PACK = 0.05;                    // % de chances qu'une carte d'un pack normal soit un skin (4 fois moins qu'une Mythique)
+  // joueurs pro (pros.js) : encore bien plus rares que les skins. Jamais garantis, jamais à vendre contre de l'or :
+  // seulement en surprise dans un pack (≈ 1 pack sur 500), ou au marché.
+  const PRO_IN_PACK = 0.04;                     // % de chances qu'une carte d'un pack soit un joueur pro
+  const PRO_ODDS = [45, 30, 17, 6.5, 1.5];      // chances de rareté pour chaque joueur pro tiré
+  const PRO_BONUS = 2;                          // joueur pro à son poste : +2 niveaux (et +2 au niveau max)
+  // cartes « en plus » : pas comptées dans la collection de base
+  const extra = (c) => c.type === "skin" || c.type === "pro";
   // part de chaque type dans un pack : peu d'objets et de runes, car chaque exemplaire ne sert qu'à un perso
   const MIX = { champ: 33, spell: 57, item: 6, rune: 4 };
   // Pourquoi une carte a sa rareté (affiché sur la carte en grand)
@@ -249,6 +256,7 @@ const Master = (() => {
         });
       }
     }
+    buildPros();
     const STEP = { R: 0, Q: 1, W: 1, E: 1, P: 2 };
     for (const c of cards.champ) {
       const cr = champR[c.champId] || 0;
@@ -304,6 +312,58 @@ const Master = (() => {
     for (const c of pool) ((byTypeRar[c.type] ||= {})[c.r] ||= []).push(c);
   }
 
+  // ---------- Joueurs pro ----------
+  const PRO_ROLES = ["top", "jungle", "mid", "adc", "support"];
+  const PRO_WORLDS = { champion: "Champion du monde 2026", finale: "Finaliste des Worlds 2026", worlds: "Qualifié aux Worlds 2026" };
+  const proId = (name) => `p_${String(name).toLowerCase().replace(/[^a-z0-9]/g, "")}`;
+  function proRarity(team) {
+    if (team.worlds === "champion") return [4, `${team.name} : championne du monde 2026`];
+    const big = team.league === "LCK" || team.league === "LPL";
+    if (team.worlds) return big ? [3, `${team.name} : équipe ${team.league} qualifiée aux Worlds 2026${team.worlds === "finale" ? " (finaliste)" : ""}`] : [2, `${team.name} : équipe ${team.league} qualifiée aux Worlds 2026`];
+    return big ? [1, `${team.name} : équipe ${team.league} pas qualifiée aux Worlds 2026`] : [0, `${team.name} : équipe ${team.league} pas qualifiée aux Worlds 2026`];
+  }
+  const xml = (t) => String(t).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[ch]);
+  // pas de photo des joueurs : une illustration aux couleurs de l'équipe, avec l'icône du poste et le sigle de l'équipe
+  function proArt(team, role) {
+    const [c1, c2] = team.c || ["#c8aa6e", "#010a13"];
+    const icon = (LANES[role].match(/<svg[^>]*>([\s\S]*?)<\/svg>/) || [])[1] || "";
+    const tagSize = Math.min(120, Math.floor(460 / Math.max(2, team.tag.length)));
+    const svgTxt = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 444">
+      <defs><linearGradient id="g" x1="0" y1="0" x2=".5" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset=".75" stop-color="${c2}"/></linearGradient>
+      <radialGradient id="l" cx=".5" cy=".36" r=".5"><stop offset="0" stop-color="#fff" stop-opacity=".38"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+      <pattern id="p" width="18" height="18" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="18" fill="#fff" fill-opacity=".06"/></pattern></defs>
+      <rect width="300" height="444" fill="url(#g)"/><rect width="300" height="444" fill="url(#p)"/><rect width="300" height="444" fill="url(#l)"/>
+      <g transform="translate(100 46) scale(4.2)" fill="#fff" fill-opacity=".92">${icon.replace(/opacity="\.3"/g, 'opacity=".35"')}</g>
+      <text x="150" y="${196 + tagSize * 0.7}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="${tagSize}" fill="#fff" fill-opacity=".9" letter-spacing="2">${xml(team.tag)}</text>
+      <text x="150" y="${222 + tagSize * 0.7}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="17" fill="#fff" fill-opacity=".7" letter-spacing="5">${xml(team.league)}</text>
+    </svg>`;
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgTxt.replace(/\s*\n\s*/g, " "))}`;
+  }
+  function buildPros() {
+    const PR = window.MASTER_PROS;
+    if (!PR || !Array.isArray(PR.teams)) return;
+    const seen = new Set();
+    for (const team of PR.teams) {
+      const [tr, twhy] = proRarity(team);
+      (team.players || []).forEach((x, i) => {
+        const [name, role] = Array.isArray(x) ? x : [x, PRO_ROLES[i]];
+        const id = proId(name);
+        if (!name || !LANES[role] || seen.has(id)) return; // pseudo en double : on garde le premier
+        seen.add(id);
+        let r = tr, why = twhy;
+        const o = (PR.override || {})[id];
+        if (o && RAR.includes(o)) { r = RAR.indexOf(o); why = (PR.why || {})[id] || "Rareté choisie à la main"; }
+        const roleName = LANES[role].replace(/<svg[\s\S]*<\/svg>/, "");
+        pool.push({
+          id, type: "pro", r, why, name, role, team: team.name, teamTag: team.tag, league: team.league,
+          sub: `${team.name} · ${team.league}`, art: proArt(team, role), icon: null,
+          desc: `${roleName}${PRO_WORLDS[team.worlds] ? ` · ${PRO_WORLDS[team.worlds]}` : ""}`,
+          lanes: [role],
+        });
+      });
+    }
+  }
+
   // ---------- Packs ----------
   function tick() {
     const now = clock();
@@ -347,8 +407,10 @@ const Master = (() => {
     if (Math.max(...rs) < 3 && s.pity.l + 1 >= PITY_LEG) rs[PACK_SIZE - 1] = rollRarity(3);
     const taken = new Set();
     const out = rs.map((r) => {
-      const surprise = rand() * 100 < SKIN_IN_PACK; // très rarement, un skin à la place d'une carte normale
-      const c = surprise ? pickCard("skin", rollRarity(0, SKIN_ODDS), taken) : pickCard(pickWeighted(w), r, taken);
+      // très rarement, un skin à la place d'une carte normale ; encore plus rarement, un joueur pro
+      const x = rand() * 100;
+      const surprise = x < SKIN_IN_PACK, pro = !surprise && x < SKIN_IN_PACK + PRO_IN_PACK;
+      const c = (surprise && pickCard("skin", rollRarity(0, SKIN_ODDS), taken)) || (pro && pickCard("pro", rollRarity(0, PRO_ODDS), taken)) || pickCard(pickWeighted(w), r, taken);
       if (c) taken.add(c.id);
       return c;
     }).filter(Boolean);
@@ -357,7 +419,7 @@ const Master = (() => {
     if (special) { const k = pickCard("skin", rollRarity(0, SKIN_ODDS), taken); if (k) out.push(k); }
     return out;
   }
-  // ajoute les cartes à la collection, et les montre de la moins rare à la plus rare (le skin toujours en dernier)
+  // ajoute les cartes à la collection, et les montre de la moins rare à la plus rare (skin puis joueur pro toujours en dernier)
   function receive(got, title) {
     const now = Math.floor(Date.now() / 60e3);
     const res = got.map((c) => {
@@ -369,7 +431,8 @@ const Master = (() => {
     present(res, title);
   }
   function present(res, title) {
-    res.sort((a, b) => (a.c.type === "skin") - (b.c.type === "skin") || a.c.r - b.c.r);
+    const last = (c) => (c.type === "pro" ? 2 : c.type === "skin" ? 1 : 0);
+    res.sort((a, b) => last(a.c) - last(b.c) || a.c.r - b.c.r);
     // pack pas encore regardé : gardé pour le remontrer si la page se recharge pendant l'ouverture
     // (gardé sur cet appareil seulement : un autre appareil n'a pas à rouvrir ce pack)
     store.set("flc_master_unseen", { t: title || "", c: res.map((x) => [x.c.id, x.isNew ? 1 : 0, x.n]) });
@@ -456,7 +519,7 @@ const Master = (() => {
 
   function cardHtml(c, { n = 0, back = false, big = false, isNew = false } = {}) {
     const missing = n === 0 && !back && !isNew;
-    const art = c.type === "champ" || c.type === "skin"
+    const art = c.type === "champ" || c.type === "skin" || c.type === "pro"
       ? `<img class="mc-champ" src="${c.art}" alt="" decoding="async">`
       : `${c.art ? `<img class="mc-blur" src="${c.art}" alt="" decoding="async">` : ""}<img class="mc-icon" src="${c.icon}" alt="" decoding="async">`;
     // pas de loading="lazy" : certaines images de skins ne se chargeaient jamais (la grille est déjà limitée à 60 cartes à la fois)
@@ -474,6 +537,7 @@ const Master = (() => {
         ${n > 1 ? `<div class="mc-count">×${n}</div>` : ""}
         ${isNew ? `<div class="mc-new">Nouvelle !</div>` : ""}
         ${c.type === "skin" ? `<div class="mc-skintag">Skin</div>` : ""}
+        ${c.type === "pro" ? `<div class="mc-skintag mc-protag">Pro</div>` : ""}
       </div>
     </div>`;
   }
@@ -521,8 +585,8 @@ const Master = (() => {
   }
 
   function renderProgress() {
-    const base = pool.filter((c) => c.type !== "skin"), skins = pool.filter((c) => c.type === "skin");
-    const owned = base.filter((c) => s.inv[c.id]).length, ownedSkins = skins.filter((c) => s.inv[c.id]).length;
+    const base = pool.filter((c) => !extra(c)), skins = pool.filter((c) => c.type === "skin"), pros = pool.filter((c) => c.type === "pro");
+    const owned = base.filter((c) => s.inv[c.id]).length, ownedSkins = skins.filter((c) => s.inv[c.id]).length, ownedPros = pros.filter((c) => s.inv[c.id]).length;
     let html = `<div class="m-total"><b>${owned}</b> / ${base.length} cartes · ${s.opened} pack${s.opened > 1 ? "s" : ""} ouvert${s.opened > 1 ? "s" : ""}</div>`;
     for (let r = RAR.length - 1; r >= 0; r--) {
       const all = base.filter((c) => c.r === r);
@@ -530,6 +594,7 @@ const Master = (() => {
       html += `<div class="m-rbar r-${RAR[r]}"><span>${RAR_FR[RAR[r]]}</span><div class="bar"><i style="width:${all.length ? (100 * have) / all.length : 0}%"></i></div><em>${have}/${all.length}</em></div>`;
     }
     html += `<div class="m-rbar skins"><span>Skins</span><div class="bar"><i style="width:${skins.length ? (100 * ownedSkins) / skins.length : 0}%"></i></div><em>${ownedSkins}/${skins.length}</em></div>`;
+    if (pros.length) html += `<div class="m-rbar pros"><span>Joueurs pro</span><div class="bar"><i style="width:${(100 * ownedPros) / pros.length}%"></i></div><em>${ownedPros}/${pros.length}</em></div>`;
     $("m-progress").innerHTML = html;
     $("stats").innerHTML = `<b>${owned}</b> / ${base.length} cartes collectionnées`;
     $("stats-bar").style.width = `${(100 * owned) / base.length}%`;
@@ -666,8 +731,8 @@ const Master = (() => {
     const box = $("m-opening");
     box.classList.remove("hidden");
     $("m-reveal").innerHTML = res.map((x, i) =>
-      `<div class="m-slot r-${RAR[x.c.r]}${x.c.type === "skin" ? " is-skin" : ""}" data-i="${i}" style="--d:${i * 70}ms"><div class="m-flip">
-        <div class="m-face m-down"><div class="m-down-logo">${x.c.type === "skin" ? "Skin<br>Hextech" : "LoL<br>Master"}</div></div>
+      `<div class="m-slot r-${RAR[x.c.r]}${x.c.type === "skin" ? " is-skin" : ""}${x.c.type === "pro" ? " is-pro" : ""}" data-i="${i}" style="--d:${i * 70}ms"><div class="m-flip">
+        <div class="m-face m-down"><div class="m-down-logo">${x.c.type === "skin" ? "Skin<br>Hextech" : x.c.type === "pro" ? "Joueur<br>Pro" : "LoL<br>Master"}</div></div>
         <div class="m-face m-up">${cardHtml(x.c, { n: x.n, back: true, isNew: x.isNew })}</div>
       </div></div>`).join("");
     $("m-reveal").querySelectorAll(".m-slot").forEach((el) => (el.onclick = () => reveal(el)));
@@ -678,9 +743,10 @@ const Master = (() => {
       return view(opening[+el.dataset.i].c.id);
     }
     el.classList.add("shown");
-    ping(opening[+el.dataset.i].c.r);
+    ping(pingOf(opening[+el.dataset.i].c));
     updateOpeningButtons();
   }
+  const pingOf = (c) => (c.type === "pro" ? 4 : c.r); // un joueur pro sonne toujours comme une Mythique
   function updateOpeningButtons() {
     const hidden = $("m-reveal").querySelectorAll(".m-slot:not(.shown)").length;
     if (hidden === 0) seen();
@@ -697,7 +763,7 @@ const Master = (() => {
     $("m-reveal").querySelectorAll(".m-slot:not(.shown)").forEach((el, i) => setTimeout(() => {
       if (!opening || el.classList.contains("shown")) return;
       el.classList.add("shown");
-      ping(opening[+el.dataset.i].c.r);
+      ping(pingOf(opening[+el.dataset.i].c));
       updateOpeningButtons();
     }, i * 260));
   }
@@ -727,13 +793,18 @@ const Master = (() => {
   const itemSlots = (role) => (role === "adc" ? 7 : 6);
   const spellRank = (champId, key) => Math.min(MAX_RANK[key], 1 + (s.inv[`s_${champId}_${key}`] || 0));
   // niveau : 1, +2 par double du champion, +1 par carte de ses sorts (passif compris)
-  function champLevel(champId, role, inv = s.inv) {
+  // bonus : joueur pro à son poste (+2 niveaux, niveau max +2)
+  function champLevel(champId, role, inv = s.inv, bonus = 0) {
     const copies = inv[`c_${champId}`] || 0;
-    let pts = 2 * Math.max(0, copies - 1);
+    let pts = 2 * Math.max(0, copies - 1) + bonus;
     for (const k of "PQWER") pts += inv[`s_${champId}_${k}`] || 0;
-    const cap = role === "top" ? 20 : 18;
+    const cap = (role === "top" ? 20 : 18) + bonus;
     return { lvl: Math.min(cap, 1 + pts), cap };
   }
+  // joueur pro d'un poste, s'il est toujours possédé
+  const proOf = (t, inv) => (t && t.pro && inv[t.pro] && byId[t.pro] && byId[t.pro].type === "pro" ? byId[t.pro] : null);
+  const proBonus = (t, role, inv = s.inv) => { const p = proOf(t, inv); return p && p.role === role ? PRO_BONUS : 0; };
+  const levelOf = (t, role, inv = s.inv) => champLevel(t.c, role, inv, proBonus(t, role, inv));
   // combien d'exemplaires d'une carte sont déjà utilisés dans l'équipe (sauf à un endroit donné)
   function used(id, except) {
     let n = 0;
@@ -771,7 +842,7 @@ const Master = (() => {
     const t = slot(role), raw = champRaw[t.c];
     const st = raw && raw.stats;
     if (!st) return "";
-    const { lvl } = champLevel(t.c, role);
+    const { lvl } = levelOf(t, role);
     const g = (base, per) => base + per * (lvl - 1) * (0.7025 + 0.0175 * (lvl - 1)); // formule de croissance de Riot
     const { sum, extra } = itemStats(t.it.filter(Boolean));
     const n = (k) => sum[k] || 0;
@@ -815,8 +886,10 @@ const Master = (() => {
       const c = byId[`c_${t.c}`];
       const sk = skinOf(t, s.inv);
       const mySkins = pool.filter((x) => x.type === "skin" && x.champId === t.c && s.inv[x.id]).length;
-      const { lvl, cap } = champLevel(t.c, role);
+      const { lvl, cap } = levelOf(t, role);
       total += lvl;
+      const pro = proOf(t, s.inv), bonus = proBonus(t, role);
+      const myPros = pool.filter((x) => x.type === "pro" && s.inv[x.id]).length;
       const spells = "PQWER".split("").map((k) => {
         const sp = byId[`s_${t.c}_${k}`];
         if (!sp) return "";
@@ -839,6 +912,8 @@ const Master = (() => {
         return `<button class="tm-slot rune${i === 0 ? " ks" : ""}${ru ? ` r-${RAR[ru.r]}` : ""}" data-role="${role}" data-kind="ru" data-i="${i}" title="${ru ? esc(ru.name) : i === 0 ? "Rune principale" : "Rune secondaire"}">${ru ? `<img src="${ru.icon}" alt="">` : "+"}</button>`;
       }).join("");
       const next = lvl >= cap ? "Niveau max" : "Prochain niveau : 1 carte d'un de ses sorts, ou un double";
+      const proNote = pro ? (bonus ? `${pro.team} · à son poste : +${PRO_BONUS} niveaux` : `${pro.team} · hors de son poste (${ROLES[pro.role].name}) : pas de bonus`)
+        : myPros ? `${myPros} joueur${myPros > 1 ? "s" : ""} pro : touche pour en choisir un (+${PRO_BONUS} niveaux à son poste)` : "Aucun joueur pro pour l'instant (cartes très rares)";
       return `<div class="tm-role r-${RAR[c.r]}">${head}
         <div class="tm-champ" data-role="${role}" title="Changer de champion"><img src="${sk ? sk.art : c.art}" alt=""><div class="tm-lvl">${lvl}</div>
           <div class="tm-cname"><b>${esc(c.name)}</b><span>Niveau ${lvl} / ${cap}</span></div></div>
@@ -849,6 +924,11 @@ const Master = (() => {
           <i class="tm-skinbox">${sk ? `<img src="${sk.art}" alt="">` : "+"}</i>
           <span><b>${sk ? esc(sk.name) : "Skin de base"}</b><em>${mySkins ? `${mySkins} skin${mySkins > 1 ? "s" : ""} pour ce champion : touche pour changer` : "Aucun skin pour ce champion pour l'instant"}</em></span>
         </button>
+        <h4>Joueur pro</h4>
+        <button class="tm-skin tm-pro${pro ? ` r-${RAR[pro.r]}` : ""}" data-role="${role}" title="Changer de joueur pro">
+          <i class="tm-skinbox">${pro ? `<img src="${pro.art}" alt="">` : "+"}</i>
+          <span><b>${pro ? esc(pro.name) : "Pas de joueur pro"}</b><em>${esc(proNote)}</em></span>
+        </button>
         <h4>Objets</h4><div class="tm-items">${items}</div>
         <h4>Runes</h4><div class="tm-items">${runes}</div>
         ${statsHtml(role)}
@@ -857,7 +937,8 @@ const Master = (() => {
     $("m-team-grid").innerHTML = html;
     $("m-team-total").textContent = `Niveau total de l'équipe : ${total}`;
     $("m-team-grid").querySelectorAll(".tm-pick, .tm-champ").forEach((el) => (el.onclick = () => pickChamp(el.dataset.role)));
-    $("m-team-grid").querySelectorAll(".tm-skin").forEach((el) => (el.onclick = () => pickSkin(el.dataset.role)));
+    $("m-team-grid").querySelectorAll(".tm-skin:not(.tm-pro)").forEach((el) => (el.onclick = () => pickSkin(el.dataset.role)));
+    $("m-team-grid").querySelectorAll(".tm-pro").forEach((el) => (el.onclick = () => pickPro(el.dataset.role)));
     $("m-team-grid").querySelectorAll(".tm-slot").forEach((el) => (el.onclick = () => pickGear(el.dataset.role, el.dataset.kind, +el.dataset.i)));
   }
 
@@ -869,6 +950,26 @@ const Master = (() => {
       .map((x) => ({ c: x, v: x.id, img: x.art, search: x.name, note: `${RAR_FR[RAR[x.r]]}${t.sk === x.id ? " · équipé" : ""}` }))
       .sort((a, b) => b.c.r - a.c.r || a.c.name.localeCompare(b.c.name));
     openPicker(`Skin de ${byId[`c_${t.c}`].name} (✕ = skin de base)`, opts, (id) => { t.sk = id || null; saveTeam(); renderTeam(); }, true);
+  }
+
+  // joueur pro d'un poste : un exemplaire = un poste ; s'il est déjà dans un autre poste, les deux postes échangent
+  function pickPro(role) {
+    const t = slot(role);
+    const where = {};
+    for (const [r, x] of Object.entries(s.team)) if (x && x.pro && x.c) where[x.pro] = r;
+    const opts = pool.filter((x) => x.type === "pro" && s.inv[x.id]).map((x) => {
+      const fits = x.role === role;
+      const other = where[x.id] && where[x.id] !== role ? ` · déjà en ${ROLES[where[x.id]].name} (échange)` : where[x.id] === role ? " · dans ce poste" : "";
+      return { c: x, v: x.id, img: x.art, fits, search: `${x.name} ${x.team} ${x.teamTag} ${x.league}`,
+        note: `${x.teamTag} · ${ROLES[x.role].name}${fits ? ` · +${PRO_BONUS} niveaux` : " · hors poste"}${other}` };
+    }).sort((a, b) => b.fits - a.fits || b.c.r - a.c.r || a.c.name.localeCompare(b.c.name));
+    openPicker(`Joueur pro pour le poste ${ROLES[role].name}`, opts, (id) => {
+      const from = id && where[id];
+      if (from && from !== role) { const f = slot(from); [f.pro, t.pro] = [t.pro || null, id]; }
+      else t.pro = id || null;
+      saveTeam();
+      renderTeam();
+    }, !!t.pro, true);
   }
 
   // ---- choix dans une liste ----
@@ -907,7 +1008,7 @@ const Master = (() => {
     for (const [r, t] of Object.entries(s.team)) if (t.c) where[t.c] = r;
     const champs = pool.filter((c) => c.type === "champ" && s.inv[c.id]).map((c) => {
       const fits = (c.lanes || []).includes(role);
-      const { lvl } = champLevel(c.champId, role);
+      const { lvl } = champLevel(c.champId, role, s.inv, proBonus(s.team[role], role));
       const other = where[c.champId] && where[c.champId] !== role ? ` · déjà en ${ROLES[where[c.champId]].name} (échange)` : "";
       return { c, v: c.champId, img: c.art, fits, lvl, search: c.name, note: `Niveau ${lvl}${fits ? "" : " · hors poste"}${other}` };
     }).sort((a, b) => b.fits - a.fits || b.lvl - a.lvl || a.c.name.localeCompare(b.c.name));
@@ -970,6 +1071,7 @@ const Master = (() => {
   function free(id) {
     let n = (s.inv[id] || 0) - used(id);
     if (id.startsWith("c_") && Object.values(s.team).some((t) => t.c && `c_${t.c}` === id)) n--;
+    if (id.startsWith("p_") && Object.values(s.team).some((t) => t.c && t.pro === id)) n--;
     return Math.max(0, n);
   }
   function recycle(id, quiet) {
@@ -1001,7 +1103,7 @@ const Master = (() => {
     build();
     if (!db || !u || !pool || served()) return; // avec le serveur, c'est lui qui tient le profil public
     const byR = [0, 0, 0, 0, 0];
-    const base = pool.filter((c) => c.type !== "skin");
+    const base = pool.filter((c) => !extra(c));
     for (const c of base) if (s.inv[c.id]) byR[c.r]++;
     db.collection("profiles").doc(u.uid).set({
       name: u.displayName || "Joueur", photo: u.photoURL || "", owned: byR.reduce((a, b) => a + b, 0), total: base.length,
@@ -1033,7 +1135,7 @@ const Master = (() => {
     if (ui.tab !== "players" || viewing) return;
     const me = Account.user && Account.user.uid;
     $("m-plist").innerHTML = players.length ? players.map((p) => {
-      const lvl = Object.entries(p.team || {}).reduce((a, [role, t]) => a + (t.c && p.inv && p.inv[`c_${t.c}`] ? champLevel(t.c, role, p.inv).lvl : 0), 0);
+      const lvl = Object.entries(p.team || {}).reduce((a, [role, t]) => a + (t.c && p.inv && p.inv[`c_${t.c}`] ? levelOf(t, role, p.inv).lvl : 0), 0);
       return `<button class="m-player" data-uid="${esc(p.uid)}">
         ${p.photo ? `<img src="${esc(p.photo)}" alt="" onerror="this.remove()">` : `<i class="m-avatar">${esc((p.name || "?")[0])}</i>`}
         <span><b>${esc(p.name)}${p.uid === me ? " (toi)" : ""}</b><em>${p.owned || 0} / ${p.total || pool.length} cartes · ${(p.byR || [])[4] || 0} mythique${((p.byR || [])[4] || 0) > 1 ? "s" : ""} · équipe niveau ${lvl}</em></span>
@@ -1046,9 +1148,10 @@ const Master = (() => {
     const box = $("m-players");
     const inv = p.inv || {};
     const owned = pool.filter((c) => inv[c.id]).sort((a, b) => b.r - a.r || a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
-    const base = pool.filter((c) => c.type !== "skin"), nBase = owned.filter((c) => c.type !== "skin").length, nSkins = owned.length - nBase;
+    const base = pool.filter((c) => !extra(c)), nBase = owned.filter((c) => !extra(c)).length;
+    const nSkins = owned.filter((c) => c.type === "skin").length, nPros = owned.filter((c) => c.type === "pro").length;
     const bars = RAR.map((r, i) => i).reverse().map((i) => {
-      const all = base.filter((c) => c.r === i).length, have = owned.filter((c) => c.r === i && c.type !== "skin").length;
+      const all = base.filter((c) => c.r === i).length, have = owned.filter((c) => c.r === i && !extra(c)).length;
       return `<div class="m-rbar r-${RAR[i]}"><span>${RAR_FR[RAR[i]]}</span><div class="bar"><i style="width:${all ? (100 * have) / all : 0}%"></i></div><em>${have}/${all}</em></div>`;
     }).join("");
     const team = Object.entries(ROLES).map(([role, R]) => {
@@ -1057,13 +1160,14 @@ const Master = (() => {
       if (!c) return `<div class="pf-role empty"><div class="tm-rhead">${roleIcon(role)}<b>${R.name}</b></div><em>Vide</em></div>`;
       const icons = [...(t.it || []).map((x) => x && byId[`i_${x}`]), ...(t.ru || []).map((x) => x && byId[`r_${x}`])].filter(Boolean);
       return `<div class="pf-role r-${RAR[c.r]}"><div class="tm-rhead">${roleIcon(role)}<b>${R.name}</b></div>
-        <div class="pf-champ"><img src="${(skinOf(t, inv) || c).art}" alt=""><div class="tm-lvl">${champLevel(t.c, role, inv).lvl}</div><span>${esc(c.name)}</span></div>
+        <div class="pf-champ"><img src="${(skinOf(t, inv) || c).art}" alt=""><div class="tm-lvl">${levelOf(t, role, inv).lvl}</div><span>${esc(c.name)}</span></div>
+        ${proOf(t, inv) ? `<div class="pf-pro r-${RAR[proOf(t, inv).r]}"><img src="${proOf(t, inv).art}" alt=""><span>${esc(proOf(t, inv).name)}</span></div>` : ""}
         <div class="pf-gear">${icons.map((x) => `<img class="r-${RAR[x.r]}" src="${x.icon}" title="${esc(x.name)}" alt="">`).join("")}</div></div>`;
     }).join("");
     box.innerHTML = `<div class="m-panel">
         <button class="link pf-back">← Tous les joueurs</button>
         <div class="pf-head">${p.photo ? `<img src="${esc(p.photo)}" alt="" onerror="this.remove()">` : `<i class="m-avatar">${esc((p.name || "?")[0])}</i>`}
-          <div><h2>${esc(p.name)}</h2><em>${nBase} / ${base.length} cartes · ${nSkins} skin${nSkins > 1 ? "s" : ""} · ${p.opened || 0} packs ouverts</em></div></div>
+          <div><h2>${esc(p.name)}</h2><em>${nBase} / ${base.length} cartes · ${nSkins} skin${nSkins > 1 ? "s" : ""}${nPros ? ` · ${nPros} joueur${nPros > 1 ? "s" : ""} pro` : ""} · ${p.opened || 0} packs ouverts</em></div></div>
         <div class="pf-bars">${bars}</div>
       </div>
       <div class="m-panel"><h2>Équipe</h2><div class="pf-team">${team}</div></div>
@@ -1289,7 +1393,9 @@ const Master = (() => {
       <div class="mv-info">
         <div class="mv-own">${n ? `Possédée${n > 1 ? ` en ${n} exemplaires` : ""}` : "Pas encore trouvée"}</div>
         <div class="mv-why"><b class="r-${RAR[c.r]}">${RAR_FR[RAR[c.r]]}</b> : ${esc(c.why)}</div>
-        <div class="mv-chance">${c.type === "skin" ? `${pct(SKIN_ODDS[c.r])} de chances qu'un skin tiré soit ${RAR_FR[RAR[c.r]]}` : `${pct(ODDS[c.r])} de chances par carte d'un pack`}</div>
+        <div class="mv-chance">${c.type === "skin" ? `${pct(SKIN_ODDS[c.r])} de chances qu'un skin tiré soit ${RAR_FR[RAR[c.r]]}`
+          : c.type === "pro" ? `${pct(PRO_IN_PACK)} de chances par carte d'être un joueur pro (≈ 1 pack sur ${Math.round(100 / (PRO_IN_PACK * PACK_SIZE))}), puis ${pct(PRO_ODDS[c.r])} qu'il soit ${RAR_FR[RAR[c.r]]}`
+          : `${pct(ODDS[c.r])} de chances par carte d'un pack`}</div>
         ${n > 1 && free(id) > 0 && !isGuest() ? `<button class="btn good mv-recycle" data-id="${id}">Recycler un double (+${RECYCLE[c.r]} or)</button>` : ""}
         ${extra}
       </div>`;
@@ -1349,13 +1455,14 @@ const Master = (() => {
     $("m-grid").onclick = (e) => { const el = e.target.closest(".mc"); if (el) view(el.dataset.id); };
     $("m-view").onclick = (e) => { if (!e.target.closest("details")) $("m-view").classList.add("hidden"); };
     $("m-odds").innerHTML = RAR.map((r, i) => `<span class="r-${r}">${RAR_FR[r]} ${pct(ODDS[i])}</span>`).join("")
-      + `<em>Chances pour chaque carte d'un pack (5 cartes). Si tu n'as eu aucune Légendaire en ${PITY_LEG} packs, la suivante est garantie. Un pack sur ${SPECIAL_EVERY} est spécial : il a un skin en 6e carte. Et chaque carte a ${pct(SKIN_IN_PACK)} de chances d'être un skin surprise.</em>`
+      + `<em>Chances pour chaque carte d'un pack (5 cartes). Si tu n'as eu aucune Légendaire en ${PITY_LEG} packs, la suivante est garantie. Un pack sur ${SPECIAL_EVERY} est spécial : il a un skin en 6e carte. Et chaque carte a ${pct(SKIN_IN_PACK)} de chances d'être un skin surprise, et ${pct(PRO_IN_PACK)} d'être un joueur pro (≈ 1 pack sur ${Math.round(100 / (PRO_IN_PACK * PACK_SIZE))}, sans garantie).</em>`
       + `<details><summary>Comment sont choisies les raretés ?</summary><ul>
         <li><b>Champions</b> : selon leur taux de pick en Challenger (${ST.source.champ}). Plus un champion est joué, plus il est rare.</li>
         <li><b>Sorts</b> : la rareté de leur champion. L'ultime au même niveau (au moins Rare), A Z E un cran en dessous, le passif deux crans en dessous.</li>
         <li><b>Objets</b> : selon leur taux d'achat (${ST.source.item}, pas de filtre Challenger disponible). Composants Rares. Bottes Légendaires si très achetées, sinon Épiques ; bottes T3 un cran au-dessus. Tout est un cran plus rare que le taux d'achat seul, car un exemplaire suffit pour un build.</li>
         <li><b>Runes</b> : selon leur taux de choix (${ST.source.rune}), runes principales et secondaires classées à part, puis un cran plus rares (un exemplaire suffit pour un build).</li>
         <li><b>Skins</b> : dans le pack spécial (1 sur ${SPECIAL_EVERY}), achetés ${SKIN_PRICE} or, ou très rarement en surprise dans un pack normal (${pct(SKIN_IN_PACK)} par carte, 4 fois moins qu'une Mythique). Rareté selon la catégorie de prix de Riot : Commune jusqu'à 975 RP, Rare 1350 RP, Épique 1820 RP, Légendaire Prestige et Mythiques, Mythique Ultimes et Transcendants. Chances pour chaque skin : ${RAR.map((r, i) => `${RAR_FR[r]} ${pct(SKIN_ODDS[i])}`).join(", ")}.</li>
+        <li><b>Joueurs pro</b> : les cartes les plus rares, joueurs des effectifs 2026 (LCK, LPL, LEC, LCS, et les équipes LCP et CBLOL des Worlds). Seulement en surprise dans un pack (${pct(PRO_IN_PACK)} par carte), jamais garantis ni achetables en or, mais on peut les échanger au marché. Rareté selon l'équipe : Mythique les champions du monde 2026 (et Faker), Légendaire les équipes LCK et LPL des Worlds, Épique les autres équipes des Worlds, Rare les autres équipes LCK et LPL, Commune les autres équipes LEC et LCS. Chances pour chaque joueur : ${RAR.map((r, i) => `${RAR_FR[r]} ${pct(PRO_ODDS[i])}`).join(", ")}. Dans l'équipe, un joueur pro à son poste donne +${PRO_BONUS} niveaux à son champion.</li>
         <li>Touche une carte de ta collection pour voir sa stat.</li></ul></details>`;
     document.addEventListener("keydown", (e) => {
       if (prefs.mode !== "master" || e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
