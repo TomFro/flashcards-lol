@@ -16,6 +16,8 @@ const CFG = {
   SPECIAL_EVERY: 10, SKIN_PRICE: 200,
   SKIN_ODDS: [60, 28, 9, 2.5, 0.5],
   SKIN_IN_PACK: 0.05,
+  PRO_IN_PACK: 0.04,                      // joueurs pro : % par carte d'un pack (≈ 1 pack sur 500), jamais garantis
+  PRO_ODDS: [45, 30, 17, 6.5, 1.5],
   PRICE_MAX: 1e6,
   GUEST_PACKS_MAX: 20,                    // packs rendus au plus à l'inscription pour ceux ouverts en invité
 };
@@ -50,11 +52,11 @@ function plausible(s) {
 const GOLD_IMPORT_MAX = 20000;
 
 // pool : liste [id, rareté] envoyée par le site de l'administrateur. Le type se lit dans l'identifiant :
-// c_ champion, s_ sort, i_ objet, r_ rune, k_ skin.
+// c_ champion, s_ sort, i_ objet, r_ rune, k_ skin, p_ joueur pro.
 function indexPool(list) {
   const byId = new Map(), byTypeRar = {};
   for (const [id, r] of list) {
-    if (typeof id !== "string" || !/^[csirk]_/.test(id) || !(r >= 0 && r <= 4)) continue;
+    if (typeof id !== "string" || !/^[csirkp]_/.test(id) || !(r >= 0 && r <= 4)) continue;
     byId.set(id, r);
     ((byTypeRar[id[0]] ||= {})[r] ||= []).push(id);
   }
@@ -121,8 +123,12 @@ function openPack(s, P, now, rand) {
   const taken = new Set();
   const out = [];
   for (const r of rs) {
-    const surprise = rand() * 100 < CFG.SKIN_IN_PACK;
-    const id = surprise ? pickCard(P, "k", rollRarity(0, CFG.SKIN_ODDS, rand), taken, rand) : pickCard(P, pickWeighted(CFG.MIX, rand), r, taken, rand);
+    // très rarement un skin à la place de la carte, encore plus rarement un joueur pro (un seul tirage pour les deux)
+    const x = rand() * 100;
+    const surprise = x < CFG.SKIN_IN_PACK, pro = !surprise && x < CFG.SKIN_IN_PACK + CFG.PRO_IN_PACK;
+    const id = (surprise && pickCard(P, "k", rollRarity(0, CFG.SKIN_ODDS, rand), taken, rand))
+      || (pro && pickCard(P, "p", rollRarity(0, CFG.PRO_ODDS, rand), taken, rand))
+      || pickCard(P, pickWeighted(CFG.MIX, rand), r, taken, rand);
     if (id) { taken.add(id); out.push(id); }
   }
   const top = Math.max(...out.map((id) => P.byId.get(id)));
@@ -139,7 +145,7 @@ function buySkin(s, P, now, rand) {
   return { cards: give(s, [k], now) };
 }
 
-// exemplaires pris par l'équipe : objets et runes équipés, et le champion d'un poste
+// exemplaires pris par l'équipe : objets et runes équipés, le champion et le joueur pro d'un poste
 function used(s, id) {
   let n = 0;
   for (const t of Object.values(s.team || {})) {
@@ -147,6 +153,7 @@ function used(s, id) {
     for (const x of t.it || []) if (x && `i_${x}` === id) n++;
     for (const x of t.ru || []) if (x && `r_${x}` === id) n++;
     if (t.c && `c_${t.c}` === id) n++;
+    if (t.c && t.pro && t.pro === id) n++;
   }
   return n;
 }
@@ -175,11 +182,11 @@ function recycleAll(s, P, maxR) {
 }
 
 // L'équipe est choisie par le joueur : on vérifie seulement qu'il possède ce qu'il équipe,
-// et qu'un exemplaire ne sert qu'à un seul champion.
+// et qu'un exemplaire ne sert qu'à un seul champion (un joueur pro : un seul poste).
 const ROLES = ["top", "jungle", "mid", "adc", "support"];
 function setTeam(s, team) {
   if (!team || typeof team !== "object") fail("bad-team", "Équipe invalide.");
-  const clean = {}, champs = new Set(), count = {};
+  const clean = {}, champs = new Set(), pros = new Set(), count = {};
   const str = (x) => (typeof x === "string" && x.length < 60 ? x : null);
   for (const role of ROLES) {
     const t = team[role];
@@ -199,6 +206,8 @@ function setTeam(s, team) {
     out.ru = slots(t.ru, 4, "r");
     const sk = str(t.sk);
     if (out.c && sk && sk.startsWith(`k_${out.c}_`) && s.inv[sk]) out.sk = sk;
+    const pro = str(t.pro);
+    if (out.c && pro && pro.startsWith("p_") && s.inv[pro] && !pros.has(pro)) { out.pro = pro; pros.add(pro); }
     clean[role] = out;
   }
   s.team = clean;

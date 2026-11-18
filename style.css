@@ -961,3 +961,42 @@ body.mode-master .stage, body.mode-master #filters, body.mode-master #dl, body.m
   padding: 12px 18px; border-radius: 12px; background: #1c2333; color: #f1f3f9; border: 1px solid #c8aa6e; box-shadow: 0 8px 30px rgba(0,0,0,.5);
   font-size: 15px; text-align: center; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
 #m-note.on { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---- cartes de joueur pro : les plus rares (illustration pleine carte aux couleurs de l'équipe, cadre or et noir) ---- */
+:root { --pro: #ffd76a; --pro-dark: #3a2a06; }
+.mc.t-pro .mc-frame { border: 2px solid transparent; background: #010a13;
+  border-image: linear-gradient(160deg, #fff6d6, var(--pro) 25%, #8a6514 50%, var(--pro) 75%, #fff6d6) 1;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--pro) 55%, transparent), 0 0 34px color-mix(in srgb, var(--rc) 50%, transparent), inset 0 0 0 1px #000; }
+.mc.t-pro .mc-frame::before { content: ""; position: absolute; inset: 5px; z-index: 3; pointer-events: none; border: 1px solid #ffd76a88;
+  clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 14px, 100% calc(100% - 14px), calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px), 0 14px); }
+.mc.t-pro .mc-frame::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 250%; pointer-events: none; z-index: 3; mix-blend-mode: overlay;
+  background: linear-gradient(115deg, transparent 42%, #ffffff66 50%, transparent 58%); animation: mc-shine 2.8s linear infinite; will-change: transform; }
+.mc.t-pro .mc-art { position: absolute; inset: 0; height: 100%; }
+.mc.t-pro .mc-champ { object-position: center; }
+.mc.t-pro .mc-gem { display: none; }
+.mc.t-pro .mc-body { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding-top: 30px; flex: none;
+  background: linear-gradient(180deg, transparent, #010a13d9 40%, #010a13f5); }
+.mc.t-pro .mc-name { color: #fff6d6; font-size: 17px; text-shadow: 0 0 12px color-mix(in srgb, var(--pro) 80%, transparent); }
+.mc.t-pro .mc-sub { color: var(--pro); }
+.mc-protag { background: linear-gradient(90deg, #fff6d6, var(--pro), #c8952a); }
+.mc.t-pro.missing .mc-frame { border-image: none; border-color: #3a3220; box-shadow: none; }
+.mc.t-pro.missing .mc-frame::after { display: none; }
+.mc.t-pro.missing .mc-protag { background: #3a3220; color: var(--grey1); }
+.mc.t-pro.missing .mc-name { text-shadow: none; color: var(--grey2); }
+@container (min-width: 300px) { .mc.t-pro .mc-name { font-size: 28px; } }
+.m-rbar.pros { --rc: var(--pro); }
+/* au dos, dans l'ouverture d'un pack : une carte dorée qui brille plus fort que tout le reste */
+.m-slot.is-pro .m-down { border-color: var(--pro);
+  background: repeating-linear-gradient(45deg, #ffd76a14 0 2px, transparent 2px 14px), radial-gradient(circle at 50% 45%, #ffd76a77, transparent 65%), linear-gradient(160deg, #4a3608, #010a13 60%, #4a3608); }
+.m-slot.is-pro .m-down::before { border-color: #fff6d699; }
+.m-slot.is-pro .m-down-logo { color: #fff6d6; text-shadow: 0 0 16px var(--pro), 0 0 30px #ff9d00; font-size: 17px; }
+.m-slot.is-pro:not(.shown) .m-down::after { animation: m-glow .8s ease-in-out infinite alternate; box-shadow: 0 0 40px var(--pro), 0 0 90px #ff9d0088; }
+.m-slot.is-pro:not(.shown) { animation: m-deal .45s both, pro-shake 2.4s ease-in-out infinite; animation-delay: var(--d), calc(var(--d) + .6s); }
+.m-slot.shown.is-pro::after { animation: m-burst .9s ease-out; }
+@keyframes pro-shake { 0%, 86%, 100% { transform: none; } 89% { transform: rotate(-2deg) scale(1.03); } 93% { transform: rotate(2deg) scale(1.03); } 96% { transform: rotate(-1deg); } }
+/* équipe : joueur pro du poste */
+.tm-pro .tm-skinbox img { object-position: center 45%; }
+.tm-pro[class*="r-"] .tm-skinbox { border-color: var(--pro); box-shadow: 0 0 8px #ffd76a66; }
+.pf-pro { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #fff6d6; }
+.pf-pro img { width: 28px; height: 28px; object-fit: cover; border: 1px solid var(--pro); }
+@media (prefers-reduced-motion: reduce) { .m-slot.is-pro:not(.shown) { animation: m-deal .45s both; } .mc.t-pro .mc-frame::after { animation: none; } }
