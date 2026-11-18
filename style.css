@@ -1000,3 +1000,7 @@ body.mode-master .stage, body.mode-master #filters, body.mode-master #dl, body.m
 .pf-pro { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #fff6d6; }
 .pf-pro img { width: 28px; height: 28px; object-fit: cover; border: 1px solid var(--pro); }
 @media (prefers-reduced-motion: reduce) { .m-slot.is-pro:not(.shown) { animation: m-deal .45s both; } .mc.t-pro .mc-frame::after { animation: none; } }
+/* photo du joueur pro, posée sur l'illustration de son équipe */
+.mc-pro-photo { position: absolute; left: 0; right: 0; bottom: 30%; width: 100%; height: auto; max-height: 72%; object-fit: contain; object-position: center bottom;
+  filter: drop-shadow(0 6px 14px #000c); }
+.mc.t-pro .mc-body { padding-top: 46px; }

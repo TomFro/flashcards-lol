@@ -324,7 +324,7 @@ const Master = (() => {
   }
   const xml = (t) => String(t).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[ch]);
   // pas de photo des joueurs : une illustration aux couleurs de l'équipe, avec l'icône du poste et le sigle de l'équipe
-  function proArt(team, role) {
+  function proArt(team, role, photo) {
     const [c1, c2] = team.c || ["#c8aa6e", "#010a13"];
     const icon = (LANES[role].match(/<svg[^>]*>([\s\S]*?)<\/svg>/) || [])[1] || "";
     const tagSize = Math.min(120, Math.floor(460 / Math.max(2, team.tag.length)));
@@ -333,12 +333,18 @@ const Master = (() => {
       <radialGradient id="l" cx=".5" cy=".36" r=".5"><stop offset="0" stop-color="#fff" stop-opacity=".38"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
       <pattern id="p" width="18" height="18" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="18" fill="#fff" fill-opacity=".06"/></pattern></defs>
       <rect width="300" height="444" fill="url(#g)"/><rect width="300" height="444" fill="url(#p)"/><rect width="300" height="444" fill="url(#l)"/>
-      <g transform="translate(100 46) scale(4.2)" fill="#fff" fill-opacity=".92">${icon.replace(/opacity="\.3"/g, 'opacity=".35"')}</g>
-      <text x="150" y="${196 + tagSize * 0.7}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="${tagSize}" fill="#fff" fill-opacity=".9" letter-spacing="2">${xml(team.tag)}</text>
-      <text x="150" y="${222 + tagSize * 0.7}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="17" fill="#fff" fill-opacity=".7" letter-spacing="5">${xml(team.league)}</text>
+      ${photo
+        // avec photo : sigle de l'équipe en grand derrière le joueur, icône du poste dans le coin
+        ? `<text x="150" y="${150 + tagSize * 0.35}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="${tagSize}" fill="#fff" fill-opacity=".16" letter-spacing="2">${xml(team.tag)}</text>
+          <g transform="translate(252 14) scale(1.6)" fill="#fff" fill-opacity=".85">${icon}</g>`
+        : `<g transform="translate(100 46) scale(4.2)" fill="#fff" fill-opacity=".92">${icon.replace(/opacity="\.3"/g, 'opacity=".35"')}</g>
+          <text x="150" y="${196 + tagSize * 0.7}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="${tagSize}" fill="#fff" fill-opacity=".9" letter-spacing="2">${xml(team.tag)}</text>
+          <text x="150" y="${222 + tagSize * 0.7}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="17" fill="#fff" fill-opacity=".7" letter-spacing="5">${xml(team.league)}</text>`}
     </svg>`;
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgTxt.replace(/\s*\n\s*/g, " "))}`;
   }
+  // photo qui ne charge pas (petites images des listes) : on remet l'illustration de l'équipe
+  const photoAlt = {};
   function buildPros() {
     const PR = window.MASTER_PROS;
     if (!PR || !Array.isArray(PR.teams)) return;
@@ -354,9 +360,13 @@ const Master = (() => {
         const o = (PR.override || {})[id];
         if (o && RAR.includes(o)) { r = RAR.indexOf(o); why = (PR.why || {})[id] || "Rareté choisie à la main"; }
         const roleName = LANES[role].replace(/<svg[\s\S]*<\/svg>/, "");
+        const path = (PR.photos || {})[name];
+        const photo = path ? `${PR.photoBase}${path.split("/").map(encodeURIComponent).join("/")}/revision/latest/scale-to-width-down/300` : null;
+        const art = proArt(team, role, !!photo);
+        if (photo) photoAlt[photo] = art;
         pool.push({
           id, type: "pro", r, why, name, role, team: team.name, teamTag: team.tag, league: team.league,
-          sub: `${team.name} · ${team.league}`, art: proArt(team, role), icon: null,
+          sub: `${team.name} · ${team.league}`, art, photo, icon: photo,
           desc: `${roleName}${PRO_WORLDS[team.worlds] ? ` · ${PRO_WORLDS[team.worlds]}` : ""}`,
           lanes: [role],
         });
@@ -519,7 +529,9 @@ const Master = (() => {
 
   function cardHtml(c, { n = 0, back = false, big = false, isNew = false } = {}) {
     const missing = n === 0 && !back && !isNew;
-    const art = c.type === "champ" || c.type === "skin" || c.type === "pro"
+    const art = c.type === "pro"
+      ? `<img class="mc-champ" src="${c.art}" alt="">${c.photo ? `<img class="mc-pro-photo" src="${c.photo}" alt="" decoding="async">` : ""}`
+      : c.type === "champ" || c.type === "skin"
       ? `<img class="mc-champ" src="${c.art}" alt="" decoding="async">`
       : `${c.art ? `<img class="mc-blur" src="${c.art}" alt="" decoding="async">` : ""}<img class="mc-icon" src="${c.icon}" alt="" decoding="async">`;
     // pas de loading="lazy" : certaines images de skins ne se chargeaient jamais (la grille est déjà limitée à 60 cartes à la fois)
@@ -926,7 +938,7 @@ const Master = (() => {
         </button>
         <h4>Joueur pro</h4>
         <button class="tm-skin tm-pro${pro ? ` r-${RAR[pro.r]}` : ""}" data-role="${role}" title="Changer de joueur pro">
-          <i class="tm-skinbox">${pro ? `<img src="${pro.art}" alt="">` : "+"}</i>
+          <i class="tm-skinbox">${pro ? `<img src="${pro.photo || pro.art}" alt="">` : "+"}</i>
           <span><b>${pro ? esc(pro.name) : "Pas de joueur pro"}</b><em>${esc(proNote)}</em></span>
         </button>
         <h4>Objets</h4><div class="tm-items">${items}</div>
@@ -960,7 +972,7 @@ const Master = (() => {
     const opts = pool.filter((x) => x.type === "pro" && s.inv[x.id]).map((x) => {
       const fits = x.role === role;
       const other = where[x.id] && where[x.id] !== role ? ` · déjà en ${ROLES[where[x.id]].name} (échange)` : where[x.id] === role ? " · dans ce poste" : "";
-      return { c: x, v: x.id, img: x.art, fits, search: `${x.name} ${x.team} ${x.teamTag} ${x.league}`,
+      return { c: x, v: x.id, img: x.photo || x.art, fits, search: `${x.name} ${x.team} ${x.teamTag} ${x.league}`,
         note: `${x.teamTag} · ${ROLES[x.role].name}${fits ? ` · +${PRO_BONUS} niveaux` : " · hors poste"}${other}` };
     }).sort((a, b) => b.fits - a.fits || b.c.r - a.c.r || a.c.name.localeCompare(b.c.name));
     openPicker(`Joueur pro pour le poste ${ROLES[role].name}`, opts, (id) => {
@@ -1161,7 +1173,7 @@ const Master = (() => {
       const icons = [...(t.it || []).map((x) => x && byId[`i_${x}`]), ...(t.ru || []).map((x) => x && byId[`r_${x}`])].filter(Boolean);
       return `<div class="pf-role r-${RAR[c.r]}"><div class="tm-rhead">${roleIcon(role)}<b>${R.name}</b></div>
         <div class="pf-champ"><img src="${(skinOf(t, inv) || c).art}" alt=""><div class="tm-lvl">${levelOf(t, role, inv).lvl}</div><span>${esc(c.name)}</span></div>
-        ${proOf(t, inv) ? `<div class="pf-pro r-${RAR[proOf(t, inv).r]}"><img src="${proOf(t, inv).art}" alt=""><span>${esc(proOf(t, inv).name)}</span></div>` : ""}
+        ${proOf(t, inv) ? `<div class="pf-pro r-${RAR[proOf(t, inv).r]}"><img src="${proOf(t, inv).photo || proOf(t, inv).art}" alt=""><span>${esc(proOf(t, inv).name)}</span></div>` : ""}
         <div class="pf-gear">${icons.map((x) => `<img class="r-${RAR[x.r]}" src="${x.icon}" title="${esc(x.name)}" alt="">`).join("")}</div></div>`;
     }).join("");
     box.innerHTML = `<div class="m-panel">
@@ -1414,6 +1426,9 @@ const Master = (() => {
   document.addEventListener("error", (e) => {
     const img = e.target;
     if (!img || img.tagName !== "IMG") return;
+    // photo de joueur pro introuvable : sur une carte, l'illustration de l'équipe est déjà dessous ; ailleurs, on la met à la place
+    if (img.classList.contains("mc-pro-photo")) { img.remove(); return; }
+    if (photoAlt[img.src]) { img.src = photoAlt[img.src]; return; }
     const m = img.src.match(/\/champion\/loading\/(\w+)_(\d+)\.jpg$/);
     if (m && m[2] !== "0") {
       const raw = champRaw[m[1]];
