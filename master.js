@@ -16,10 +16,11 @@ const Master = (() => {
   // skins : jamais dans les packs normaux. Un pack sur 10 est spécial (6e carte = un skin), et on peut en acheter en or.
   const SPECIAL_EVERY = 10, SKIN_PRICE = 200;
   const SKIN_ODDS = [60, 28, 9, 2.5, 0.5];      // chances de rareté pour chaque skin tiré
-  const SKIN_IN_PACK = 0.05;                    // % de chances qu'une carte d'un pack normal soit un skin (4 fois moins qu'une Mythique)
-  // joueurs pro (pros.js) : encore bien plus rares que les skins. Jamais garantis, jamais à vendre contre de l'or :
-  // seulement en surprise dans un pack (≈ 1 pack sur 500), ou au marché.
-  const PRO_IN_PACK = 0.04;                     // % de chances qu'une carte d'un pack soit un joueur pro
+  // surprises dans les packs normaux : un skin ≈ 1 pack sur 150, un joueur pro aussi ≈ 1 pack sur 150 (demande de Tom)
+  const SURPRISE_EVERY = 150;
+  const SKIN_IN_PACK = 100 / (SURPRISE_EVERY * PACK_SIZE); // % de chances qu'une carte d'un pack normal soit un skin
+  // joueurs pro (pros.js) : jamais garantis, jamais à vendre contre de l'or : seulement en surprise dans un pack, ou au marché.
+  const PRO_IN_PACK = 100 / (SURPRISE_EVERY * PACK_SIZE);  // % de chances qu'une carte d'un pack soit un joueur pro
   const PRO_ODDS = [45, 30, 17, 6.5, 1.5];      // chances de rareté pour chaque joueur pro tiré
   const PRO_BONUS = 2;                          // joueur pro à son poste : +2 niveaux (et +2 au niveau max)
   // cartes « en plus » : pas comptées dans la collection de base
@@ -334,9 +335,8 @@ const Master = (() => {
       <pattern id="p" width="18" height="18" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="18" fill="#fff" fill-opacity=".06"/></pattern></defs>
       <rect width="300" height="444" fill="url(#g)"/><rect width="300" height="444" fill="url(#p)"/><rect width="300" height="444" fill="url(#l)"/>
       ${photo
-        // avec photo : sigle de l'équipe en grand derrière le joueur, icône du poste dans le coin
-        ? `<text x="150" y="${150 + tagSize * 0.35}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="${tagSize}" fill="#fff" fill-opacity=".16" letter-spacing="2">${xml(team.tag)}</text>
-          <g transform="translate(252 14) scale(1.6)" fill="#fff" fill-opacity=".85">${icon}</g>`
+        // avec photo : sigle de l'équipe en grand derrière le joueur (le poste est affiché par la carte elle-même)
+        ? `<text x="150" y="${150 + tagSize * 0.35}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="${tagSize}" fill="#fff" fill-opacity=".16" letter-spacing="2">${xml(team.tag)}</text>`
         : `<g transform="translate(100 46) scale(4.2)" fill="#fff" fill-opacity=".92">${icon.replace(/opacity="\.3"/g, 'opacity=".35"')}</g>
           <text x="150" y="${196 + tagSize * 0.7}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="${tagSize}" fill="#fff" fill-opacity=".9" letter-spacing="2">${xml(team.tag)}</text>
           <text x="150" y="${222 + tagSize * 0.7}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="17" fill="#fff" fill-opacity=".7" letter-spacing="5">${xml(team.league)}</text>`}
@@ -366,7 +366,7 @@ const Master = (() => {
         if (photo) photoAlt[photo] = art;
         pool.push({
           id, type: "pro", r, why, name, role, team: team.name, teamTag: team.tag, league: team.league,
-          sub: `${team.name} · ${team.league}`, art, photo, icon: photo,
+          sub: `${team.name} · ${team.league}`, art, photo, icon: photo, roleName, worlds: PRO_WORLDS[team.worlds] || "", roleSvg: LANES[role].replace(/<\/svg>[\s\S]*$/, "</svg>"),
           desc: `${roleName}${PRO_WORLDS[team.worlds] ? ` · ${PRO_WORLDS[team.worlds]}` : ""}`,
           lanes: [role],
         });
@@ -527,11 +527,41 @@ const Master = (() => {
   // ---------- Affichage ----------
   const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
 
+  // carte de joueur pro : un blason au cadre en métal (bronze, argent, violet, or, arc-en-ciel selon la rareté),
+  // fond aux couleurs de l'équipe, rayons de lumière derrière le joueur et reflet holographique
+  const PRO_SHORT = { top: "TOP", jungle: "JGL", mid: "MID", adc: "ADC", support: "SUP" };
+  function proCardHtml(c, { n, big, isNew, missing }) {
+    const rar = RAR_FR[RAR[c.r]];
+    return `<div class="mc r-${RAR[c.r]} t-pro${missing ? " missing" : ""}${big ? " big" : ""}" data-id="${c.id}">
+      <div class="mc-frame">
+        <div class="pc-shield"><div class="pc-in">
+          <img class="mc-champ" src="${c.art}" alt="">
+          <div class="pc-rays"></div>
+          ${c.photo ? `<img class="mc-pro-photo" src="${c.photo}" alt="" decoding="async">` : ""}
+          <div class="pc-foil"></div>
+          <div class="pc-top">
+            <div class="pc-role">${c.roleSvg || ""}<b>${PRO_SHORT[c.role] || ""}</b></div>
+            <div class="pc-team">${esc(c.teamTag || "")}</div>
+          </div>
+          <div class="pc-league">${esc(c.league || "")}</div>
+          <div class="pc-plate">
+            <div class="pc-label">Joueur pro · <span>${rar}</span></div>
+            <div class="mc-name">${esc(c.name)}</div>
+            <div class="pc-line"></div>
+            <div class="mc-sub">${esc(c.team)} · ${esc(c.roleName || "")}</div>
+            ${c.worlds ? `<div class="pc-worlds">★ ${esc(c.worlds)}</div>` : ""}
+          </div>
+        </div></div>
+        ${n > 1 ? `<div class="mc-count">×${n}</div>` : ""}
+        ${isNew ? `<div class="mc-new">Nouvelle !</div>` : ""}
+      </div>
+    </div>`;
+  }
+
   function cardHtml(c, { n = 0, back = false, big = false, isNew = false } = {}) {
     const missing = n === 0 && !back && !isNew;
-    const art = c.type === "pro"
-      ? `<img class="mc-champ" src="${c.art}" alt="">${c.photo ? `<img class="mc-pro-photo" src="${c.photo}" alt="" decoding="async">` : ""}`
-      : c.type === "champ" || c.type === "skin"
+    if (c.type === "pro") return proCardHtml(c, { n, big, isNew, missing });
+    const art = c.type === "champ" || c.type === "skin"
       ? `<img class="mc-champ" src="${c.art}" alt="" decoding="async">`
       : `${c.art ? `<img class="mc-blur" src="${c.art}" alt="" decoding="async">` : ""}<img class="mc-icon" src="${c.icon}" alt="" decoding="async">`;
     // pas de loading="lazy" : certaines images de skins ne se chargeaient jamais (la grille est déjà limitée à 60 cartes à la fois)
@@ -549,7 +579,6 @@ const Master = (() => {
         ${n > 1 ? `<div class="mc-count">×${n}</div>` : ""}
         ${isNew ? `<div class="mc-new">Nouvelle !</div>` : ""}
         ${c.type === "skin" ? `<div class="mc-skintag">Skin</div>` : ""}
-        ${c.type === "pro" ? `<div class="mc-skintag mc-protag">Pro</div>` : ""}
       </div>
     </div>`;
   }
@@ -1406,7 +1435,7 @@ const Master = (() => {
         <div class="mv-own">${n ? `Possédée${n > 1 ? ` en ${n} exemplaires` : ""}` : "Pas encore trouvée"}</div>
         <div class="mv-why"><b class="r-${RAR[c.r]}">${RAR_FR[RAR[c.r]]}</b> : ${esc(c.why)}</div>
         <div class="mv-chance">${c.type === "skin" ? `${pct(SKIN_ODDS[c.r])} de chances qu'un skin tiré soit ${RAR_FR[RAR[c.r]]}`
-          : c.type === "pro" ? `${pct(PRO_IN_PACK)} de chances par carte d'être un joueur pro (≈ 1 pack sur ${Math.round(100 / (PRO_IN_PACK * PACK_SIZE))}), puis ${pct(PRO_ODDS[c.r])} qu'il soit ${RAR_FR[RAR[c.r]]}`
+          : c.type === "pro" ? `≈ 1 pack sur ${SURPRISE_EVERY} contient un joueur pro, puis ${pct(PRO_ODDS[c.r])} qu'il soit ${RAR_FR[RAR[c.r]]}`
           : `${pct(ODDS[c.r])} de chances par carte d'un pack`}</div>
         ${n > 1 && free(id) > 0 && !isGuest() ? `<button class="btn good mv-recycle" data-id="${id}">Recycler un double (+${RECYCLE[c.r]} or)</button>` : ""}
         ${extra}
@@ -1470,14 +1499,14 @@ const Master = (() => {
     $("m-grid").onclick = (e) => { const el = e.target.closest(".mc"); if (el) view(el.dataset.id); };
     $("m-view").onclick = (e) => { if (!e.target.closest("details")) $("m-view").classList.add("hidden"); };
     $("m-odds").innerHTML = RAR.map((r, i) => `<span class="r-${r}">${RAR_FR[r]} ${pct(ODDS[i])}</span>`).join("")
-      + `<em>Chances pour chaque carte d'un pack (5 cartes). Si tu n'as eu aucune Légendaire en ${PITY_LEG} packs, la suivante est garantie. Un pack sur ${SPECIAL_EVERY} est spécial : il a un skin en 6e carte. Et chaque carte a ${pct(SKIN_IN_PACK)} de chances d'être un skin surprise, et ${pct(PRO_IN_PACK)} d'être un joueur pro (≈ 1 pack sur ${Math.round(100 / (PRO_IN_PACK * PACK_SIZE))}, sans garantie).</em>`
+      + `<em>Chances pour chaque carte d'un pack (5 cartes). Si tu n'as eu aucune Légendaire en ${PITY_LEG} packs, la suivante est garantie. Un pack sur ${SPECIAL_EVERY} est spécial : il a un skin en 6e carte. En plus, environ 1 pack sur ${SURPRISE_EVERY} contient un skin surprise, et 1 pack sur ${SURPRISE_EVERY} un joueur pro (${pct(+PRO_IN_PACK.toFixed(3))} par carte pour chacun, sans garantie).</em>`
       + `<details><summary>Comment sont choisies les raretés ?</summary><ul>
         <li><b>Champions</b> : selon leur taux de pick en Challenger (${ST.source.champ}). Plus un champion est joué, plus il est rare.</li>
         <li><b>Sorts</b> : la rareté de leur champion. L'ultime au même niveau (au moins Rare), A Z E un cran en dessous, le passif deux crans en dessous.</li>
         <li><b>Objets</b> : selon leur taux d'achat (${ST.source.item}, pas de filtre Challenger disponible). Composants Rares. Bottes Légendaires si très achetées, sinon Épiques ; bottes T3 un cran au-dessus. Tout est un cran plus rare que le taux d'achat seul, car un exemplaire suffit pour un build.</li>
         <li><b>Runes</b> : selon leur taux de choix (${ST.source.rune}), runes principales et secondaires classées à part, puis un cran plus rares (un exemplaire suffit pour un build).</li>
-        <li><b>Skins</b> : dans le pack spécial (1 sur ${SPECIAL_EVERY}), achetés ${SKIN_PRICE} or, ou très rarement en surprise dans un pack normal (${pct(SKIN_IN_PACK)} par carte, 4 fois moins qu'une Mythique). Rareté selon la catégorie de prix de Riot : Commune jusqu'à 975 RP, Rare 1350 RP, Épique 1820 RP, Légendaire Prestige et Mythiques, Mythique Ultimes et Transcendants. Chances pour chaque skin : ${RAR.map((r, i) => `${RAR_FR[r]} ${pct(SKIN_ODDS[i])}`).join(", ")}.</li>
-        <li><b>Joueurs pro</b> : les cartes les plus rares, joueurs des effectifs 2026 (LCK, LPL, LEC, LCS, et les équipes LCP et CBLOL des Worlds). Seulement en surprise dans un pack (${pct(PRO_IN_PACK)} par carte), jamais garantis ni achetables en or, mais on peut les échanger au marché. Rareté selon l'équipe : Mythique les champions du monde 2026 (et Faker), Légendaire les équipes LCK et LPL des Worlds, Épique les autres équipes des Worlds, Rare les autres équipes LCK et LPL, Commune les autres équipes LEC et LCS. Chances pour chaque joueur : ${RAR.map((r, i) => `${RAR_FR[r]} ${pct(PRO_ODDS[i])}`).join(", ")}. Dans l'équipe, un joueur pro à son poste donne +${PRO_BONUS} niveaux à son champion.</li>
+        <li><b>Skins</b> : dans le pack spécial (1 sur ${SPECIAL_EVERY}), achetés ${SKIN_PRICE} or, ou en surprise dans un pack normal (≈ 1 pack sur ${SURPRISE_EVERY}). Rareté selon la catégorie de prix de Riot : Commune jusqu'à 975 RP, Rare 1350 RP, Épique 1820 RP, Légendaire Prestige et Mythiques, Mythique Ultimes et Transcendants. Chances pour chaque skin : ${RAR.map((r, i) => `${RAR_FR[r]} ${pct(SKIN_ODDS[i])}`).join(", ")}.</li>
+        <li><b>Joueurs pro</b> : les cartes les plus rares, joueurs des effectifs 2026 (LCK, LPL, LEC, LCS, et les équipes LCP et CBLOL des Worlds). Seulement en surprise dans un pack (≈ 1 pack sur ${SURPRISE_EVERY}, comme les skins surprise), jamais garantis ni achetables en or, mais on peut les échanger au marché. Rareté selon l'équipe : Mythique les champions du monde 2026 (et Faker), Légendaire les équipes LCK et LPL des Worlds, Épique les autres équipes des Worlds, Rare les autres équipes LCK et LPL, Commune les autres équipes LEC et LCS. Chances pour chaque joueur : ${RAR.map((r, i) => `${RAR_FR[r]} ${pct(PRO_ODDS[i])}`).join(", ")}. Dans l'équipe, un joueur pro à son poste donne +${PRO_BONUS} niveaux à son champion.</li>
         <li>Touche une carte de ta collection pour voir sa stat.</li></ul></details>`;
     document.addEventListener("keydown", (e) => {
       if (prefs.mode !== "master" || e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
