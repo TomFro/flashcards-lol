@@ -15,8 +15,8 @@ const CFG = {
   MIX: { c: 33, s: 57, i: 6, r: 4 },      // champion, sort, objet, rune
   SPECIAL_EVERY: 10, SKIN_PRICE: 200,
   SKIN_ODDS: [60, 28, 9, 2.5, 0.5],
-  SKIN_IN_PACK: 0.05,
-  PRO_IN_PACK: 0.04,                      // joueurs pro : % par carte d'un pack (≈ 1 pack sur 500), jamais garantis
+  SKIN_IN_PACK: 100 / (150 * 5),          // skin surprise : % par carte (≈ 1 pack sur 150)
+  PRO_IN_PACK: 100 / (150 * 5),           // joueur pro : % par carte (≈ 1 pack sur 150), jamais garanti
   PRO_ODDS: [45, 30, 17, 6.5, 1.5],
   PRICE_MAX: 1e6,
   GUEST_PACKS_MAX: 20,                    // packs rendus au plus à l'inscription pour ceux ouverts en invité
