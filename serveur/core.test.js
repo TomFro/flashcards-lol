@@ -111,7 +111,7 @@ test("équipe : on ne peut équiper que ce qu'on possède, un exemplaire = un ch
   assert.equal(team.jungle.c, null);
 });
 
-test("joueurs pro : ≈ 1 pack sur 150, jamais sans pro dans la liste", () => {
+test("skins surprise et joueurs pro : ≈ 1 pack sur SURPRISE_EVERY chacun, jamais sans pro dans la liste", () => {
   const withPros = G.indexPool([...list, ...Array.from({ length: 50 }, (_, i) => [`p_pro${i}`, i % 5])]);
   const s = G.fresh(0), rand = seeded(7);
   let pros = 0, skins = 0, packs = 0;
@@ -120,8 +120,9 @@ test("joueurs pro : ≈ 1 pack sur 150, jamais sans pro dans la liste", () => {
     for (const c of G.openPack(s, withPros, 0, rand).cards.slice(0, 5)) { if (c.id.startsWith("p_")) pros++; if (c.id.startsWith("k_")) skins++; }
   }
   const per = packs / pros, perSkin = packs / skins;
-  assert.ok(per > 120 && per < 185, `1 joueur pro tous les ${per.toFixed(0)} packs`);
-  assert.ok(perSkin > 120 && perSkin < 185, `1 skin surprise tous les ${perSkin.toFixed(0)} packs`);
+  const E = G.CFG.SURPRISE_EVERY, lo = E * 0.85, hi = E * 1.15;
+  assert.ok(per > lo && per < hi, `1 joueur pro tous les ${per.toFixed(0)} packs (attendu ≈ ${E})`);
+  assert.ok(perSkin > lo && perSkin < hi, `1 skin surprise tous les ${perSkin.toFixed(0)} packs (attendu ≈ ${E})`);
   // sans joueurs pro dans la liste du serveur : jamais de carte inventée
   const s2 = G.fresh(0), r2 = seeded(8);
   for (let i = 0; i < 3000; i++) { s2.packs = 1; for (const c of G.openPack(s2, P, 0, r2).cards) assert.ok(!c.id.startsWith("p_")); }

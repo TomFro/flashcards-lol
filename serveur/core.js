@@ -12,8 +12,9 @@ export const CFG = {
   MIX: { c: 33, s: 57, i: 6, r: 4 },      // champion, sort, objet, rune
   SPECIAL_EVERY: 10, SKIN_PRICE: 200,
   SKIN_ODDS: [60, 28, 9, 2.5, 0.5],
-  SKIN_IN_PACK: 100 / (150 * 5),          // skin surprise : % par carte (≈ 1 pack sur 150)
-  PRO_IN_PACK: 100 / (150 * 5),           // joueur pro : % par carte (≈ 1 pack sur 150), jamais garanti
+  SURPRISE_EVERY: 100,                    // skin surprise et joueur pro : chacun 0,2 % par carte comme une Mythique, ≈ 1 pack sur 100 (même nombre que master.js)
+  get SKIN_IN_PACK() { return 100 / (this.SURPRISE_EVERY * this.PACK_SIZE); }, // skin surprise : % par carte
+  get PRO_IN_PACK() { return 100 / (this.SURPRISE_EVERY * this.PACK_SIZE); },  // joueur pro : % par carte, jamais garanti
   PRO_ODDS: [45, 30, 17, 6.5, 1.5],
   PRICE_MAX: 1e6,
   GUEST_PACKS_MAX: 20,                    // packs rendus au plus à l'inscription pour ceux ouverts en invité
