@@ -16,8 +16,8 @@ const Master = (() => {
   // skins : jamais dans les packs normaux. Un pack sur 10 est spécial (6e carte = un skin), et on peut en acheter en or.
   const SPECIAL_EVERY = 10, SKIN_PRICE = 200;
   const SKIN_ODDS = [60, 28, 9, 2.5, 0.5];      // chances de rareté pour chaque skin tiré
-  // surprises dans les packs normaux : un skin ≈ 1 pack sur 150, un joueur pro aussi ≈ 1 pack sur 150 (demande de Tom)
-  const SURPRISE_EVERY = 150;
+  // surprises dans les packs normaux : un skin et un joueur pro ont chacun la chance d'une Mythique (0,2 % par carte, ≈ 1 pack sur 100), demande de Tom ; même nombre que serveur/core.js
+  const SURPRISE_EVERY = 100;
   const SKIN_IN_PACK = 100 / (SURPRISE_EVERY * PACK_SIZE); // % de chances qu'une carte d'un pack normal soit un skin
   // joueurs pro (pros.js) : jamais garantis, jamais à vendre contre de l'or : seulement en surprise dans un pack, ou au marché.
   const PRO_IN_PACK = 100 / (SURPRISE_EVERY * PACK_SIZE);  // % de chances qu'une carte d'un pack soit un joueur pro
