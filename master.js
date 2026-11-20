@@ -21,7 +21,9 @@ const Master = (() => {
   const SKIN_IN_PACK = 100 / (SURPRISE_EVERY * PACK_SIZE); // % de chances qu'une carte d'un pack normal soit un skin
   // joueurs pro (pros.js) : jamais garantis, jamais à vendre contre de l'or : seulement en surprise dans un pack, ou au marché.
   const PRO_IN_PACK = 100 / (SURPRISE_EVERY * PACK_SIZE);  // % de chances qu'une carte d'un pack soit un joueur pro
-  const PRO_ODDS = [45, 30, 17, 6.5, 1.5];      // chances de rareté pour chaque joueur pro tiré
+  // joueurs pro : pas de rareté (demande de Tom, ils sont déjà assez rares). En interne ils comptent comme
+  // des Mythiques, pour l'or du recyclage et le tri ; même nombre que PRO_R dans serveur/core.js
+  const PRO_R = 4;
   const PRO_BONUS = 2;                          // joueur pro à son poste : +2 niveaux (et +2 au niveau max)
   // cartes « en plus » : pas comptées dans la collection de base
   const extra = (c) => c.type === "skin" || c.type === "pro";
@@ -317,12 +319,6 @@ const Master = (() => {
   const PRO_ROLES = ["top", "jungle", "mid", "adc", "support"];
   const PRO_WORLDS = { champion: "Champion du monde 2026", finale: "Finaliste des Worlds 2026", worlds: "Qualifié aux Worlds 2026" };
   const proId = (name) => `p_${String(name).toLowerCase().replace(/[^a-z0-9]/g, "")}`;
-  function proRarity(team) {
-    if (team.worlds === "champion") return [4, `${team.name} : championne du monde 2026`];
-    const big = team.league === "LCK" || team.league === "LPL";
-    if (team.worlds) return big ? [3, `${team.name} : équipe ${team.league} qualifiée aux Worlds 2026${team.worlds === "finale" ? " (finaliste)" : ""}`] : [2, `${team.name} : équipe ${team.league} qualifiée aux Worlds 2026`];
-    return big ? [1, `${team.name} : équipe ${team.league} pas qualifiée aux Worlds 2026`] : [0, `${team.name} : équipe ${team.league} pas qualifiée aux Worlds 2026`];
-  }
   const xml = (t) => String(t).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[ch]);
   // pas de photo des joueurs : une illustration aux couleurs de l'équipe, avec l'icône du poste et le sigle de l'équipe
   function proArt(team, role, photo) {
@@ -350,22 +346,18 @@ const Master = (() => {
     if (!PR || !Array.isArray(PR.teams)) return;
     const seen = new Set();
     for (const team of PR.teams) {
-      const [tr, twhy] = proRarity(team);
       (team.players || []).forEach((x, i) => {
         const [name, role] = Array.isArray(x) ? x : [x, PRO_ROLES[i]];
         const id = proId(name);
         if (!name || !LANES[role] || seen.has(id)) return; // pseudo en double : on garde le premier
         seen.add(id);
-        let r = tr, why = twhy;
-        const o = (PR.override || {})[id];
-        if (o && RAR.includes(o)) { r = RAR.indexOf(o); why = (PR.why || {})[id] || "Rareté choisie à la main"; }
         const roleName = LANES[role].replace(/<svg[\s\S]*<\/svg>/, "");
         const path = (PR.photos || {})[name];
         const photo = path ? `${PR.photoBase}${path.split("/").map(encodeURIComponent).join("/")}/revision/latest/scale-to-width-down/300` : null;
         const art = proArt(team, role, !!photo);
         if (photo) photoAlt[photo] = art;
         pool.push({
-          id, type: "pro", r, why, name, role, team: team.name, teamTag: team.tag, league: team.league,
+          id, type: "pro", r: PRO_R, why: "", name, role, team: team.name, teamTag: team.tag, league: team.league,
           sub: `${team.name} · ${team.league}`, art, photo, icon: photo, roleName, worlds: PRO_WORLDS[team.worlds] || "", roleSvg: LANES[role].replace(/<\/svg>[\s\S]*$/, "</svg>"),
           desc: `${roleName}${PRO_WORLDS[team.worlds] ? ` · ${PRO_WORLDS[team.worlds]}` : ""}`,
           lanes: [role],
@@ -420,7 +412,7 @@ const Master = (() => {
       // très rarement, un skin à la place d'une carte normale ; encore plus rarement, un joueur pro
       const x = rand() * 100;
       const surprise = x < SKIN_IN_PACK, pro = !surprise && x < SKIN_IN_PACK + PRO_IN_PACK;
-      const c = (surprise && pickCard("skin", rollRarity(0, SKIN_ODDS), taken)) || (pro && pickCard("pro", rollRarity(0, PRO_ODDS), taken)) || pickCard(pickWeighted(w), r, taken);
+      const c = (surprise && pickCard("skin", rollRarity(0, SKIN_ODDS), taken)) || (pro && pickCard("pro", PRO_R, taken)) || pickCard(pickWeighted(w), r, taken);
       if (c) taken.add(c.id);
       return c;
     }).filter(Boolean);
@@ -531,8 +523,7 @@ const Master = (() => {
   // fond aux couleurs de l'équipe, rayons de lumière derrière le joueur et reflet holographique
   const PRO_SHORT = { top: "TOP", jungle: "JGL", mid: "MID", adc: "ADC", support: "SUP" };
   function proCardHtml(c, { n, big, isNew, missing }) {
-    const rar = RAR_FR[RAR[c.r]];
-    return `<div class="mc r-${RAR[c.r]} t-pro${missing ? " missing" : ""}${big ? " big" : ""}" data-id="${c.id}">
+    return `<div class="mc t-pro${missing ? " missing" : ""}${big ? " big" : ""}" data-id="${c.id}">
       <div class="mc-frame">
         <div class="pc-shield"><div class="pc-in">
           <img class="mc-champ" src="${c.art}" alt="">
@@ -545,7 +536,7 @@ const Master = (() => {
           </div>
           <div class="pc-league">${esc(c.league || "")}</div>
           <div class="pc-plate">
-            <div class="pc-label">Joueur pro · <span>${rar}</span></div>
+            <div class="pc-label">Joueur pro</div>
             <div class="mc-name">${esc(c.name)}</div>
             <div class="pc-line"></div>
             <div class="mc-sub">${esc(c.team)} · ${esc(c.roleName || "")}</div>
@@ -654,7 +645,7 @@ const Master = (() => {
     const list = pool.filter((c) => {
       const n = s.inv[c.id] || 0;
       if (ui.type.length && !ui.type.includes(c.type)) return false;
-      if (ui.rar.length && !ui.rar.includes(String(c.r))) return false;
+      if (ui.rar.length && (c.type === "pro" || !ui.rar.includes(String(c.r)))) return false; // les joueurs pro n'ont pas de rareté
       if (ui.own === "have" && !n) return false;
       if (ui.own === "missing" && n) return false;
       if (ui.own === "dup" && n < 2) return false;
@@ -1308,7 +1299,7 @@ const Master = (() => {
     const q = mk.q.trim().toLowerCase();
     const list = listings.filter((l) => l.status === "open").filter((l) => {
       const c = byId[l.card];
-      return (!q || `${c.name} ${c.champ || ""} ${c.sub}`.toLowerCase().includes(q)) && (!mk.rar.length || mk.rar.includes(c.r));
+      return (!q || `${c.name} ${c.champ || ""} ${c.sub}`.toLowerCase().includes(q)) && (!mk.rar.length || (c.type !== "pro" && mk.rar.includes(c.r)));
     });
     const sorts = { recent: (a, b) => tsOf(b.createdAt) - tsOf(a.createdAt), cheap: (a, b) => a.price - b.price, dear: (a, b) => b.price - a.price, rarity: (a, b) => byId[b.card].r - byId[a.card].r || a.price - b.price };
     list.sort(sorts[mk.sort]);
@@ -1328,7 +1319,7 @@ const Master = (() => {
     const options = pool.filter((c) => s.inv[c.id]).map((c) => {
       const f = free(c.id);
       return { c, v: c.id, img: c.icon || c.art, off: f < 1, search: `${c.name} ${c.champ || ""}`,
-        note: f < 1 ? "exemplaire utilisé dans ton équipe" : `${f} exemplaire${f > 1 ? "s" : ""} libre${f > 1 ? "s" : ""} · ${RAR_FR[RAR[c.r]]}` };
+        note: f < 1 ? "exemplaire utilisé dans ton équipe" : `${f} exemplaire${f > 1 ? "s" : ""} libre${f > 1 ? "s" : ""} · ${c.type === "pro" ? "Joueur pro" : RAR_FR[RAR[c.r]]}` };
     }).sort((a, b) => a.off - b.off || b.c.r - a.c.r || a.c.name.localeCompare(b.c.name));
     openPicker("Quelle carte vendre ?", options, (id) => {
       if (!id) return;
@@ -1433,9 +1424,9 @@ const Master = (() => {
     $("m-view-box").innerHTML = `${cardHtml(c, { n, big: true })}
       <div class="mv-info">
         <div class="mv-own">${n ? `Possédée${n > 1 ? ` en ${n} exemplaires` : ""}` : "Pas encore trouvée"}</div>
-        <div class="mv-why"><b class="r-${RAR[c.r]}">${RAR_FR[RAR[c.r]]}</b> : ${esc(c.why)}</div>
+        <div class="mv-why">${c.type === "pro" ? `<b class="pro-word">Joueur pro</b> : pas de rareté, ils sont tous aussi rares` : `<b class="r-${RAR[c.r]}">${RAR_FR[RAR[c.r]]}</b> : ${esc(c.why)}`}</div>
         <div class="mv-chance">${c.type === "skin" ? `${pct(SKIN_ODDS[c.r])} de chances qu'un skin tiré soit ${RAR_FR[RAR[c.r]]}`
-          : c.type === "pro" ? `≈ 1 pack sur ${SURPRISE_EVERY} contient un joueur pro, puis ${pct(PRO_ODDS[c.r])} qu'il soit ${RAR_FR[RAR[c.r]]}`
+          : c.type === "pro" ? `≈ 1 pack sur ${SURPRISE_EVERY} contient un joueur pro, et chaque joueur a la même chance de tomber`
           : `${pct(ODDS[c.r])} de chances par carte d'un pack`}</div>
         ${n > 1 && free(id) > 0 && !isGuest() ? `<button class="btn good mv-recycle" data-id="${id}">Recycler un double (+${RECYCLE[c.r]} or)</button>` : ""}
         ${extra}
@@ -1506,7 +1497,7 @@ const Master = (() => {
         <li><b>Objets</b> : selon leur taux d'achat (${ST.source.item}, pas de filtre Challenger disponible). Composants Rares. Bottes Légendaires si très achetées, sinon Épiques ; bottes T3 un cran au-dessus. Tout est un cran plus rare que le taux d'achat seul, car un exemplaire suffit pour un build.</li>
         <li><b>Runes</b> : selon leur taux de choix (${ST.source.rune}), runes principales et secondaires classées à part, puis un cran plus rares (un exemplaire suffit pour un build).</li>
         <li><b>Skins</b> : dans le pack spécial (1 sur ${SPECIAL_EVERY}), achetés ${SKIN_PRICE} or, ou en surprise dans un pack normal (≈ 1 pack sur ${SURPRISE_EVERY}). Rareté selon la catégorie de prix de Riot : Commune jusqu'à 975 RP, Rare 1350 RP, Épique 1820 RP, Légendaire Prestige et Mythiques, Mythique Ultimes et Transcendants. Chances pour chaque skin : ${RAR.map((r, i) => `${RAR_FR[r]} ${pct(SKIN_ODDS[i])}`).join(", ")}.</li>
-        <li><b>Joueurs pro</b> : les cartes les plus rares, joueurs des effectifs 2026 (LCK, LPL, LEC, LCS, et les équipes LCP et CBLOL des Worlds). Seulement en surprise dans un pack (≈ 1 pack sur ${SURPRISE_EVERY}, comme les skins surprise), jamais garantis ni achetables en or, mais on peut les échanger au marché. Rareté selon l'équipe : Mythique les champions du monde 2026 (et Faker), Légendaire les équipes LCK et LPL des Worlds, Épique les autres équipes des Worlds, Rare les autres équipes LCK et LPL, Commune les autres équipes LEC et LCS. Chances pour chaque joueur : ${RAR.map((r, i) => `${RAR_FR[r]} ${pct(PRO_ODDS[i])}`).join(", ")}. Dans l'équipe, un joueur pro à son poste donne +${PRO_BONUS} niveaux à son champion.</li>
+        <li><b>Joueurs pro</b> : les cartes les plus rares, joueurs des effectifs 2026 (LCK, LPL, LEC, LCS, et les équipes LCP et CBLOL des Worlds). Seulement en surprise dans un pack (≈ 1 pack sur ${SURPRISE_EVERY}, comme les skins surprise), jamais garantis ni achetables en or, mais on peut les échanger au marché. Pas de rareté : tous les joueurs ont la même chance de tomber. Un double recyclé rapporte ${RECYCLE[PRO_R]} or, comme une Mythique. Dans l'équipe, un joueur pro à son poste donne +${PRO_BONUS} niveaux à son champion.</li>
         <li>Touche une carte de ta collection pour voir sa stat.</li></ul></details>`;
     document.addEventListener("keydown", (e) => {
       if (prefs.mode !== "master" || e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;

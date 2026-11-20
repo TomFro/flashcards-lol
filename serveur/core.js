@@ -15,7 +15,7 @@ export const CFG = {
   SURPRISE_EVERY: 100,                    // skin surprise et joueur pro : chacun 0,2 % par carte comme une Mythique, ≈ 1 pack sur 100 (même nombre que master.js)
   get SKIN_IN_PACK() { return 100 / (this.SURPRISE_EVERY * this.PACK_SIZE); }, // skin surprise : % par carte
   get PRO_IN_PACK() { return 100 / (this.SURPRISE_EVERY * this.PACK_SIZE); },  // joueur pro : % par carte, jamais garanti
-  PRO_ODDS: [45, 30, 17, 6.5, 1.5],
+  PRO_R: 4,                               // joueurs pro : pas de rareté, ils comptent tous comme des Mythiques (or du recyclage)
   PRICE_MAX: 1e6,
   GUEST_PACKS_MAX: 20,                    // packs rendus au plus à l'inscription pour ceux ouverts en invité
 };
@@ -53,8 +53,9 @@ export const GOLD_IMPORT_MAX = 20000;
 // c_ champion, s_ sort, i_ objet, r_ rune, k_ skin, p_ joueur pro.
 export function indexPool(list) {
   const byId = new Map(), byTypeRar = {};
-  for (const [id, r] of list) {
-    if (typeof id !== "string" || !/^[csirkp]_/.test(id) || !(r >= 0 && r <= 4)) continue;
+  for (const [id, sent] of list) {
+    if (typeof id !== "string" || !/^[csirkp]_/.test(id) || !(sent >= 0 && sent <= 4)) continue;
+    const r = id[0] === "p" ? CFG.PRO_R : sent; // joueur pro : même rang pour tous, quoi que dise la liste envoyée
     byId.set(id, r);
     ((byTypeRar[id[0]] ||= {})[r] ||= []).push(id);
   }
@@ -125,7 +126,7 @@ export function openPack(s, P, now, rand) {
     const x = rand() * 100;
     const surprise = x < CFG.SKIN_IN_PACK, pro = !surprise && x < CFG.SKIN_IN_PACK + CFG.PRO_IN_PACK;
     const id = (surprise && pickCard(P, "k", rollRarity(0, CFG.SKIN_ODDS, rand), taken, rand))
-      || (pro && pickCard(P, "p", rollRarity(0, CFG.PRO_ODDS, rand), taken, rand))
+      || (pro && pickCard(P, "p", CFG.PRO_R, taken, rand))
       || pickCard(P, pickWeighted(CFG.MIX, rand), r, taken, rand);
     if (id) { taken.add(id); out.push(id); }
   }
