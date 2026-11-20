@@ -16,8 +16,8 @@ const Master = (() => {
   // skins : jamais dans les packs normaux. Un pack sur 10 est spécial (6e carte = un skin), et on peut en acheter en or.
   const SPECIAL_EVERY = 10, SKIN_PRICE = 200;
   const SKIN_ODDS = [60, 28, 9, 2.5, 0.5];      // chances de rareté pour chaque skin tiré
-  // surprises dans les packs normaux : un skin et un joueur pro ont chacun la chance d'une Mythique (0,2 % par carte, ≈ 1 pack sur 100), demande de Tom ; même nombre que serveur/core.js
-  const SURPRISE_EVERY = 100;
+  // surprises dans les packs normaux : un skin ≈ 1 pack sur 50, un joueur pro aussi ≈ 1 pack sur 50 (demande de Tom) ; même nombre que serveur/core.js
+  const SURPRISE_EVERY = 50;
   const SKIN_IN_PACK = 100 / (SURPRISE_EVERY * PACK_SIZE); // % de chances qu'une carte d'un pack normal soit un skin
   // joueurs pro (pros.js) : jamais garantis, jamais à vendre contre de l'or : seulement en surprise dans un pack, ou au marché.
   const PRO_IN_PACK = 100 / (SURPRISE_EVERY * PACK_SIZE);  // % de chances qu'une carte d'un pack soit un joueur pro
@@ -1497,7 +1497,7 @@ const Master = (() => {
         <li><b>Objets</b> : selon leur taux d'achat (${ST.source.item}, pas de filtre Challenger disponible). Composants Rares. Bottes Légendaires si très achetées, sinon Épiques ; bottes T3 un cran au-dessus. Tout est un cran plus rare que le taux d'achat seul, car un exemplaire suffit pour un build.</li>
         <li><b>Runes</b> : selon leur taux de choix (${ST.source.rune}), runes principales et secondaires classées à part, puis un cran plus rares (un exemplaire suffit pour un build).</li>
         <li><b>Skins</b> : dans le pack spécial (1 sur ${SPECIAL_EVERY}), achetés ${SKIN_PRICE} or, ou en surprise dans un pack normal (≈ 1 pack sur ${SURPRISE_EVERY}). Rareté selon la catégorie de prix de Riot : Commune jusqu'à 975 RP, Rare 1350 RP, Épique 1820 RP, Légendaire Prestige et Mythiques, Mythique Ultimes et Transcendants. Chances pour chaque skin : ${RAR.map((r, i) => `${RAR_FR[r]} ${pct(SKIN_ODDS[i])}`).join(", ")}.</li>
-        <li><b>Joueurs pro</b> : les cartes les plus rares, joueurs des effectifs 2026 (LCK, LPL, LEC, LCS, et les équipes LCP et CBLOL des Worlds). Seulement en surprise dans un pack (≈ 1 pack sur ${SURPRISE_EVERY}, comme les skins surprise), jamais garantis ni achetables en or, mais on peut les échanger au marché. Pas de rareté : tous les joueurs ont la même chance de tomber. Un double recyclé rapporte ${RECYCLE[PRO_R]} or, comme une Mythique. Dans l'équipe, un joueur pro à son poste donne +${PRO_BONUS} niveaux à son champion.</li>
+        <li><b>Joueurs pro</b> : des cartes très rares, joueurs des effectifs 2026 (LCK, LPL, LEC, LCS, et les équipes LCP et CBLOL des Worlds). Seulement en surprise dans un pack (≈ 1 pack sur ${SURPRISE_EVERY}, comme les skins surprise), jamais garantis ni achetables en or, mais on peut les échanger au marché. Pas de rareté : tous les joueurs ont la même chance de tomber. Un double recyclé rapporte ${RECYCLE[PRO_R]} or, comme une Mythique. Dans l'équipe, un joueur pro à son poste donne +${PRO_BONUS} niveaux à son champion.</li>
         <li>Touche une carte de ta collection pour voir sa stat.</li></ul></details>`;
     document.addEventListener("keydown", (e) => {
       if (prefs.mode !== "master" || e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
