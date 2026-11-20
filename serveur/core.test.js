@@ -128,6 +128,14 @@ test("skins surprise et joueurs pro : ≈ 1 pack sur SURPRISE_EVERY chacun, jama
   for (let i = 0; i < 3000; i++) { s2.packs = 1; for (const c of G.openPack(s2, P, 0, r2).cards) assert.ok(!c.id.startsWith("p_")); }
 });
 
+test("joueurs pro : pas de rareté, tous au même rang et tirés au hasard parmi tous", () => {
+  const P2 = G.indexPool([...list, ["p_a", 0], ["p_b", 2], ["p_c", 4]]);
+  for (const id of ["p_a", "p_b", "p_c"]) assert.equal(P2.byId.get(id), G.CFG.PRO_R);
+  const s = G.fresh(0), rand = seeded(11), seen = new Set();
+  for (let i = 0; i < 40000 && seen.size < 3; i++) { s.packs = 1; for (const c of G.openPack(s, P2, 0, rand).cards) if (c.id.startsWith("p_")) seen.add(c.id); }
+  assert.deepEqual([...seen].sort(), ["p_a", "p_b", "p_c"]);
+});
+
 test("équipe : un joueur pro possédé, sur un seul poste, et il compte comme utilisé", () => {
   const s = G.fresh(0);
   s.inv = { c_C1: 1, c_C2: 1, c_C3: 1, p_faker: 1, p_chovy: 2 };

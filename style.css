@@ -966,18 +966,14 @@ body.mode-master .stage, body.mode-master #filters, body.mode-master #dl, body.m
    rayons de lumière derrière le joueur, reflet holographique qui passe sur la carte ---- */
 :root { --pro: #ffd76a; --pro-dark: #3a2a06;
   --pc-shape: polygon(13% 0, 87% 0, 100% 6%, 100% 89%, 50% 100%, 0 89%, 0 6%); }
-/* métal du cadre selon la rareté */
-.mc.t-pro { --m1: #f3c79a; --m2: #9a5b2c; --m3: #f7d9b8; --glow: #c9824a; }            /* commune : bronze */
-.mc.t-pro.r-rare { --m1: #f4f8fc; --m2: #8796a8; --m3: #ffffff; --glow: #b9d3ef; }     /* rare : argent */
-.mc.t-pro.r-epic { --m1: #e7c4ff; --m2: #7a2fc0; --m3: #f6e8ff; --glow: #b65cff; }     /* épique : violet */
-.mc.t-pro.r-legendary { --m1: #fff2c2; --m2: #b07a12; --m3: #fffbe8; --glow: #ffc63d; }/* légendaire : or */
-.mc.t-pro.r-mythic { --m1: #fff; --m2: #ff9d00; --m3: #fff; --glow: #ff4dd2; }         /* mythique : arc-en-ciel */
+/* un seul métal pour tous les joueurs pro (pas de rareté) : cadre arc-en-ciel animé */
+.mc.t-pro { --m1: #fff; --m2: #ff9d00; --m3: #fff; --glow: #ff4dd2; }
 .mc.t-pro .mc-frame { border: none; background: none; box-shadow: none; overflow: visible; display: block;
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--glow) 80%, transparent)) drop-shadow(0 0 16px color-mix(in srgb, var(--glow) 45%, transparent)); }
 .mc.t-pro .mc-frame::after { display: none; }
 .pc-shield { position: absolute; inset: 0; clip-path: var(--pc-shape); padding: 2.6cqw;
   background: linear-gradient(150deg, var(--m3), var(--m1) 18%, var(--m2) 42%, var(--m1) 62%, var(--m2) 82%, var(--m3)); }
-.mc.t-pro.r-mythic .pc-shield { background: linear-gradient(135deg, #ff4d6d, #ffb347, #ffe66d, #6dffb3, #4dc3ff, #c46dff, #ff4d6d, #ffb347, #ffe66d) 0 0 / 300% 300%;
+.mc.t-pro .pc-shield { background: linear-gradient(135deg, #ff4d6d, #ffb347, #ffe66d, #6dffb3, #4dc3ff, #c46dff, #ff4d6d, #ffb347, #ffe66d) 0 0 / 300% 300%;
   animation: pc-rainbow 5s linear infinite; }
 @keyframes pc-rainbow { to { background-position: 100% 100%; } }
 .pc-in { position: relative; width: 100%; height: 100%; clip-path: var(--pc-shape); overflow: hidden; background: #010a13; }
@@ -996,7 +992,7 @@ body.mode-master .stage, body.mode-master #filters, body.mode-master #dl, body.m
 .pc-foil { position: absolute; inset: 0; z-index: 2; pointer-events: none; mix-blend-mode: color-dodge; opacity: .35;
   background: linear-gradient(115deg, transparent 30%, #ff5ac866 38%, #5affff66 46%, #fff25a66 54%, transparent 62%) 0 0 / 300% 100%;
   animation: pc-foil 4.5s ease-in-out infinite; }
-.mc.t-pro.r-legendary .pc-foil, .mc.t-pro.r-mythic .pc-foil { opacity: .55; }
+.mc.t-pro .pc-foil { opacity: .55; }
 @keyframes pc-foil { 0% { background-position: 100% 0; } 60%, 100% { background-position: 0 0; } }
 /* coin en haut à gauche : poste et équipe */
 .pc-top { position: absolute; left: 9%; top: 8%; z-index: 3; display: flex; flex-direction: column; align-items: center; gap: 1cqw; color: var(--m3);
@@ -1007,15 +1003,15 @@ body.mode-master .stage, body.mode-master #filters, body.mode-master #dl, body.m
 .pc-league { position: absolute; right: 9%; top: 8%; z-index: 3; padding: .8cqw 2.4cqw; font: 700 4.4cqw/1.2 var(--text); letter-spacing: 1px; color: #010a13;
   background: linear-gradient(180deg, var(--m3), var(--m1)); box-shadow: 0 1px 4px #000a; }
 /* plaque du nom en bas */
+.mv-why .pro-word { color: var(--pro); }
 .pc-plate { position: absolute; left: 0; right: 0; bottom: 0; height: 40%; z-index: 3; padding: 9cqw 8% 0; text-align: center;
   display: flex; flex-direction: column; align-items: center; gap: 1.2cqw;
   background: linear-gradient(180deg, transparent, #010a13d0 26%, #010a13f2 55%); }
 .pc-label { font: 700 3.8cqw/1 var(--text); letter-spacing: 1.2px; text-transform: uppercase; color: var(--grey1); }
-.pc-label span { color: var(--m1); }
 .mc.t-pro .mc-name { font: 800 12.5cqw/1 var(--title); color: #fff; letter-spacing: .5px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
   background: linear-gradient(180deg, #fff, var(--m1) 70%, var(--m2)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--glow) 70%, transparent)); }
-.mc.t-pro.r-mythic .mc-name { background: linear-gradient(90deg, #ff8fa3, #ffe66d, #8fffc8, #8fd8ff, #e0a3ff) 0 0 / 200% 100%; -webkit-background-clip: text; background-clip: text; animation: pc-rainbow 4s linear infinite alternate; }
+.mc.t-pro .mc-name { background: linear-gradient(90deg, #ff8fa3, #ffe66d, #8fffc8, #8fd8ff, #e0a3ff) 0 0 / 200% 100%; -webkit-background-clip: text; background-clip: text; animation: pc-rainbow 4s linear infinite alternate; }
 .pc-line { width: 60%; height: 1px; background: linear-gradient(90deg, transparent, var(--m1), transparent); }
 .mc.t-pro .mc-sub { font-size: 4.6cqw; color: var(--m3); opacity: .9; }
 .pc-worlds { font: 700 3.8cqw/1.2 var(--text); color: #ffe27a; letter-spacing: .3px; }

@@ -5,17 +5,12 @@
 // Sources : esports.net (effectifs de janvier 2026), Sheep Esports (changements LEC avant l'été, échanges
 // d'ADC en LCK, retour de TheShy chez IG), GosuGamers (effectifs des Worlds 2026), BLG championne du monde 2026.
 //
-// Rareté d'un joueur = le parcours de son équipe en 2026 :
-//   Mythique   : champions du monde 2026 (Bilibili Gaming), et Faker
-//   Légendaire : équipes LCK et LPL qualifiées aux Worlds 2026
-//   Épique     : autres équipes qualifiées aux Worlds 2026 (LEC, LCS, LCP, CBLOL)
-//   Rare       : équipes LCK et LPL pas qualifiées aux Worlds
-//   Commune    : équipes LEC et LCS pas qualifiées aux Worlds
+// Pas de rareté pour les joueurs pro (demande de Tom) : ils sont tous aussi rares les uns que les autres.
 //
 // Pour ajouter ou corriger un joueur : modifie la liste de son équipe (ordre Top, Jungle, Mid, ADC, Support ;
 // un remplaçant s'écrit ["Pseudo", "poste"]). L'identifiant d'une carte vient du pseudo : changer le pseudo
 // d'un joueur déjà tiré fait perdre sa carte à ceux qui l'ont.
-// worlds : "champion" | "finale" | "worlds" | absent (pas qualifiée)
+// worlds : "champion" | "finale" | "worlds" | absent (pas qualifiée), affiché en bas de la carte
 window.MASTER_PROS = {
   updated: "17 novembre 2026, après la finale des Worlds",
   // photos des joueurs : images de Leaguepedia (lol.fandom.com, photos officielles 2026 quand elles existent),
@@ -252,9 +247,6 @@ window.MASTER_PROS = {
     "Way": "4/4b/TH_Way_2026_Split_1.png",
     "Castle": "9/9b/DSG_Castle_2026_Split_1.png",
   },
-  // pour forcer une rareté à la main : { p_faker: "mythic" }
-  override: { p_faker: "mythic" },
-  why: { p_faker: "La légende du jeu, champion du monde avec T1" },
   teams: [
     // ---------- LCK (Corée) ----------
     { tag: "GEN", name: "Gen.G", league: "LCK", c: ["#aa8a00", "#1b1b1b"], worlds: "finale", players: ["Kiin", "Canyon", "Chovy", "Ruler", "Duro"] },
